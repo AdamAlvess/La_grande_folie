@@ -1,0 +1,44 @@
+name: CI Qualité Logicielle
+
+# Déclenche quand on push
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    # 1. Récupérer le code
+    - uses: actions/checkout@v3
+
+    # 2. Installer Python
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    # 3. Installer les outils (pytest, flake8, mypy...)
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 4. Vérification du style (Qualimétrie) avec Flake8
+    - name: Lint with flake8
+      run: |
+        # Arrête le build s'il y a des erreurs de syntaxe ou des noms indéfinis
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Avertit pour le style (PEP8) mais ne bloque pas forcément tout (optionnel)
+        flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+
+    # 5. Vérification des types avec Mypy
+    - name: Type checking with mypy
+      run: mypy minal_logiciel.py --ignore-missing-imports
+
+    # 6. Tests et Couverture
+    - name: Test with pytest and coverage
+      run: |
+        pytest --cov=. --cov-fail-under=100
