@@ -1,5 +1,7 @@
 #!/bin/bash
 
+rm -rf .venv
+
 # 1. On définit une fonction qui va tout tuer proprement
 cleanup() {
     echo ""
@@ -13,7 +15,7 @@ cleanup() {
 trap cleanup SIGINT EXIT
 
 # 3. Sélection du port
-PORT=$(python -c "import random; print(random.randint(2000, 3000))")
+PORT=$(uv run python -c "import random; print(random.randint(2000, 3000))")
 echo "🎮 Port sélectionné : $PORT"
 echo "-----------------------------------"
 
