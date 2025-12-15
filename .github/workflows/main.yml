@@ -26,14 +26,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # 4. Vérification du style (Qualimétrie) avec Flake8
-    - name: Lint with flake8
+    # 4. Vérification du style avec Ruff (Remplaçant de Flake8)
+    - name: Lint with Ruff
       run: |
-        # Arrête le build s'il y a des erreurs de syntaxe ou des noms indéfinis
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Avertit pour le style (PEP8) mais ne bloque pas forcément tout (optionnel)
-        flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
-
+        # Vérifie le code. S'il trouve des erreurs, il bloque tout.
+        ruff check .
+        
     # 5. Vérification des types avec Mypy
     - name: Type checking with mypy
       run: mypy minal_logiciel.py --ignore-missing-imports
