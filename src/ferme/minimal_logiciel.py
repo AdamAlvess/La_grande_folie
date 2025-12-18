@@ -25,7 +25,7 @@ class PlayerGameClient(Client):
             # --- GESTION DE L'AFFICHAGE ---
             for farm in game_data["farms"]:
                 if farm["name"] == self.username:
-                    print(farm)
+                    #print(farm)
                     break
             else:
                 print(f"En attente de la ferme {self.username}...")
@@ -55,7 +55,7 @@ class PlayerGameClient(Client):
 
     def send_commands(self: "PlayerGameClient") -> None:
         data = {"commands": self._commands.copy()}
-        print("sending", data)
+        #print("sending", data)
         self.send_json(data)
         self._commands.clear()
 
