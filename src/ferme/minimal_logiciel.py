@@ -61,14 +61,13 @@ class PlayerGameClient(Client):
         self._commands.append(command)
 
     def send_commands(self: "PlayerGameClient") -> None:
-        if self._commands:
-            data = {"commands": self._commands}
-            # print("sending", data)
-            self.send_json(data)
-            self._commands.clear()
+        data = {"commands": self._commands.copy()}
+        print("sending", data)
+        self.send_json(data)
+        self._commands.clear()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     parser = argparse.ArgumentParser(description="Game client.")
     parser.add_argument(
         "-a",
@@ -85,6 +84,5 @@ if __name__ == "__main__":
         default=16210,
     )
     args = parser.parse_args()
-    # ATTENTION : J'ai corrigé l'appel ici aussi pour que ce soit propre
-    client = PlayerGameClient(args.address, args.port, "La_grande_folie")
+    client = PlayerGameClient(args.address, args.port, "La_grande_folie") 
     client.run()
