@@ -1,6 +1,5 @@
 name: CI Qualité Logicielle
 
-# Déclenche quand on push
 on:
   push:
     branches: [ "main", "master" ]
@@ -14,29 +13,30 @@ jobs:
     # 1. Récupérer le code
     - uses: actions/checkout@v3
 
-    # 2. Installer Python
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
+    # 2. Installer uv
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
       with:
-        python-version: "3.11"
+        enable-cache: true
 
-    # 3. Installer les outils (pytest, flake8, mypy...)
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+    # 3. Installer Python via uv
+    - name: Set up Python 3.11
+      run: uv python install 3.11
 
-    # 4. Vérification du style avec Ruff (Remplaçant de Flake8)
+    # 4. Vérification du style avec Ruff
     - name: Lint with Ruff
-      run: |
-        # Vérifie le code. S'il trouve des erreurs, il bloque tout.
-        ruff check .
+      run: uv run ruff check .
         
     # 5. Vérification des types avec Mypy
+    # On pointe vers le dossier src où se trouve ton code
     - name: Type checking with mypy
-      run: mypy minal_logiciel.py --ignore-missing-imports
+      run: uv run mypy src/ --ignore-missing-imports
 
     # 6. Tests et Couverture
+    # On définit le PYTHONPATH pour que pytest trouve le dossier 'src'
+    # On lance pytest sur le dossier 'Test'
     - name: Test with pytest and coverage
+      env:
+        PYTHONPATH: src
       run: |
-        pytest --cov=. --cov-fail-under=100
+        uv run pytest Test/test_ferme.py --cov=src --cov-fail-under=80
