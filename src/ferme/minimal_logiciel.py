@@ -14,7 +14,9 @@ class PlayerGameClient(Client):
     ) -> None:
         super().__init__(server_addr, port, username, spectator=False)
         self._commands: list[str] = []
+
         self.strategie = FarmStrategy(username)
+
 
     def run(self: "PlayerGameClient") -> NoReturn:
         while True:
