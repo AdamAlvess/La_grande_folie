@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock, patch
 import sys
-from src.ferme.minimal_logiciel import PlayerGameClient
+# Import absolu depuis src
+from ferme.minimal_logiciel import PlayerGameClient
 
+# Mock du module réseau pour éviter les erreurs d'import si chronobio n'est pas installé
 sys.modules["chronobio.network.client"] = MagicMock()
 
 def test_borrow_money_at_start():
@@ -9,15 +11,19 @@ def test_borrow_money_at_start():
         "day": 0,
         "farms": [{"name": "La_grande_folie", "cash": 1000}]
     }
-
-    with patch('minimal_logiciel.Client'):
+    with patch('ferme.minimal_logiciel.Client'):
         bot = PlayerGameClient("localhost", 12345, "La_grande_folie")
+        
+        # On mocke les méthodes réseau
         bot.read_json = MagicMock(side_effect=[fake_data, StopIteration])
         bot.send_json = MagicMock()
+        
         try:
             bot.run()
         except StopIteration:
             pass
+            
+        # Vérification
         args = bot.send_json.call_args[0][0]
         commands = args["commands"]
         assert "0 EMPRUNTER 100000" in commands
