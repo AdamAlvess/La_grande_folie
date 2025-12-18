@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 from ferme.minimal_logiciel import PlayerGameClient
+from ferme.employer import GestionnairePersonnel
 
 def test_logique_metier_pure():
     # --- 1. PRÉPARATION (MOCK) ---
@@ -39,3 +40,22 @@ def test_logique_metier_pure():
     assert commandes.count("0 EMPLOYER") == 2
 
     assert "1 SEMER PATATE 3" in commandes
+
+def test_rh_doit_embaucher():
+    """
+    Scénario : J'ai 1 champ, 0 employé, et plein d'argent.
+    Attendu : Je dois embaucher (Cible = 1 champ + 2 = 3).
+    """
+    drh = GestionnairePersonnel("MaFerme")
+    
+    # Simulation des données de la ferme
+    fake_ferme = {
+        "cash": 50000,
+        "fields": [{"id": 1}],        # 1 champ -> Besoin de personnel
+        "employees": []               # Personne -> Il faut recruter
+    }
+
+    commandes = drh.gerer_effectifs(fake_ferme)
+
+    assert "0 EMPLOYER" in commandes
+    print(f"\n✅ Test Embauche OK : {commandes}")
