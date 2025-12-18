@@ -64,4 +64,5 @@ if __name__ == "__main__":
         default=16210,
     )
     args = parser.parse_args()
-    client = PlayerGameClient(args.address, args.port, "La_grande_folie").run()
+    client: PlayerGameClient = PlayerGameClient(args.address, args.port, "La_grande_folie")
+    client.run()

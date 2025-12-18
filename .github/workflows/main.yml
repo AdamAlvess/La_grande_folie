@@ -2,9 +2,9 @@ name: CI Qualité Logicielle
 
 on:
   push:
-    branches: [ "main", "master", "test" ]
+    branches: ["test" ]
   pull_request:
-    branches: [ "main", "master", "test" ]
+    branches: ["test" ]
 
 jobs:
   build:
