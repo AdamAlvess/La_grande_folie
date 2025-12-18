@@ -8,7 +8,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 # =============================================================================
 
-from patate import Strategy
+from cultiver import Cultiver
 
 class PlayerGameClient(Client):
     def __init__(
@@ -18,7 +18,7 @@ class PlayerGameClient(Client):
         self._commands: list[str] = []
 
         # On initialise ton cerveau
-        self.strategy = Strategy()
+        self.strategy = Cultiver()
 
     def run(self: "PlayerGameClient") -> NoReturn:
         while True:
