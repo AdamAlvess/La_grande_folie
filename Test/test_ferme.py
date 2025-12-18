@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 import sys
 from src.ferme.minimal_logiciel import PlayerGameClient
+
 sys.modules["chronobio.network.client"] = MagicMock()
 
 def test_borrow_money_at_start():
