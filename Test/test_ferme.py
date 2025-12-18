@@ -10,8 +10,6 @@ def test_client_demarrage_jour_0():
     with patch("chronobio.network.client.Client.__init__", return_value=None):
         bot = PlayerGameClient("bidon", 0, "La_grande_folie")
         bot.username = "La_grande_folie"
-
-    # On simule la réception du message du Jour 0
     donnees_entree = {
         "day": 0,
         "farms": [{"name": "La_grande_folie", "cash": 1000}]
@@ -47,13 +45,13 @@ def test_rh_doit_embaucher():
     """
     drh = GestionnairePersonnel("MaFerme")
     
-    fake_ferme = {
+    donnees_entree = {
         "cash": 50000,
         "fields": [{"id": 1}],        
         "employees": []         
     }
 
-    commandes = drh.gerer_effectifs(fake_ferme)
+    commandes = drh.gerer_effectifs(donnees_entree)
 
     assert "0 EMPLOYER" in commandes
 
@@ -67,7 +65,7 @@ def test_rh_doit_licencier():
     """
     drh = GestionnairePersonnel("MaFerme")
     
-    fake_ferme = {
+    donnees_entree = {
         "cash": 50000,   # Assez d'argent pour payer l'indemnité
         "fields": [],    # 0 champ -> On doit vider les effectifs
         "employees": [
@@ -76,7 +74,7 @@ def test_rh_doit_licencier():
         ]
     }
 
-    commandes = drh.gerer_effectifs(fake_ferme)
+    commandes = drh.gerer_effectifs(donnees_entree)
 
     # On vérifie qu'il y a bien une commande de licenciement pour l'ID 20
     assert "0 LICENCIER 20" in commandes
