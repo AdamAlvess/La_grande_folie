@@ -1,5 +1,4 @@
 from unittest.mock import MagicMock, patch
-import pytest
 from ferme.minimal_logiciel import PlayerGameClient
 
 def test_logique_metier_pure():
