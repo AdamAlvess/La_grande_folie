@@ -31,6 +31,11 @@ def test_logique_metier_pure():
     print(f"Commandes générées : {commandes}")
 
     # --- 5. ASSERTIONS MÉTIER ---
-    # C'est ici que tu valides ton intelligence
     assert "0 EMPRUNTER 100000" in commandes
-    assert "0 ACHETER_TRACTEUR" in commandes
+    assert commandes.count("0 ACHETER_CHAMP") == 3
+
+    assert commandes.count("0 ACHETER_TRACTEUR") == 2
+
+    assert commandes.count("0 EMPLOYER") == 2
+
+    assert "1 SEMER PATATE 3" in commandes
