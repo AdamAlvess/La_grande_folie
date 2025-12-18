@@ -5,7 +5,6 @@ import random
 import shutil
 import os
 import signal
-import platform
 
 # 1. Nettoyage initial (équivalent du rm -rf .venv)
 # On le fait en Python pour que ça marche sur Windows aussi

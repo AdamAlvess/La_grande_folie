@@ -9,7 +9,7 @@ def test_borrow_money_at_start():
         "farms": [{"name": "La_grande_folie", "cash": 1000}]
     }
 
-    with patch('minal_logiciel.Client'):
+    with patch('minimal_logiciel.Client'):
         bot = PlayerGameClient("localhost", 1234, "La_grande_folie")
         bot.read_json = MagicMock(side_effect=[fake_data, StopIteration])
         bot.send_json = MagicMock()
