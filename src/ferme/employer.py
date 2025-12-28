@@ -11,6 +11,10 @@ class GestionnairePersonnel:
         return salaire_prochain_mois
 
     def gerer_effectifs(self, ma_ferme: dict) -> list[str]:
+        
+        if ma_ferme.get("blocked", False):
+            # On ne fait rien si la ferme est bloquée, sinon on spamme le serveur pour rien
+            return []
         commandes = []
         employes = ma_ferme["employees"]
         champs = ma_ferme["fields"]

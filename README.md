@@ -7,3 +7,4 @@ Le principe est de créer une ferme qui va tourner automatiquement et qui va év
 Commande UV : 
 - uv run python -m ferme.minimal_logiciel (lancer le client)
 - uv run python "commande dans le read me chronobios" (lancer le serveur)
+- uv run python launch.py  pour tout lancer en meme temps

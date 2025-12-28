@@ -24,6 +24,11 @@ class FarmStrategy:
         
         if not ma_ferme:
             return []
+        
+        # --- SÉCURITÉ GLOBALE ---
+        if ma_ferme.get("blocked", False):
+            print(f"🛑 [STRATÉGIE] Ferme bloquée au jour {game_data['day']}. Silence total.")
+            return []
 
         # Données utiles
         day = game_data["day"]

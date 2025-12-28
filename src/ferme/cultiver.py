@@ -2,31 +2,29 @@ class Cultiver:
     def __init__(self):
         # --- MÉMOIRES ---
         self.employee_busy_until = {1: 6}  
-        self.field_busy_until = {}
+        self.field_busy_until = {3: 6} # <--- AJOUTE CETTE LIGNE
         self.tractor_busy_until = {}     
 
+   
     def execute(self, farm, day, cash) -> list[str]:
         commandes = [] 
         
         # --- 0. SÉCURITÉ ANTI-BAN ---
         if farm.get("blocked", False):
-            print("🛑 ALERTE : La ferme est BLOQUÉE ! Silence radio.")
+            # Le message est géré par strategie.py maintenant, on renvoie juste vide
             return []
 
         fields = farm.get("fields", [])
         employees = farm.get("employees", [])
         tractors = farm.get("tractors", []) 
+        stock = farm.get("stock", {})
         
-        # --- FIX STOCK : On va chercher dans l'usine de soupe ! ---
+        # Diagnostics (inchangés)
         soup_factory = farm.get("soup_factory", {})
-        stock = soup_factory.get("stock", {})
-        
-        # --- DIAGNOSTIC CLAIR ---
-        nb_patates = stock.get("POTATO", 0)
-        # On affiche Patates + Cash pour voir si tu t'enrichis
+        stock_usine = soup_factory.get("stock", {})
+        nb_patates = stock_usine.get("POTATO", 0)
         print(f"📊 [BILAN JOUR {day}] 🥔 Patates: {nb_patates} | 💰 Cash: {cash}")
         
-        # On affiche le contenu des tracteurs pour suivre les livraisons
         for t in tractors:
             content = t.get("content", "EMPTY")
             if content != "EMPTY":
@@ -41,6 +39,12 @@ class Cultiver:
         task_plant = []   
 
         for index, field in enumerate(fields, start=1):
+            
+            # --- FIX CRITIQUE : ON VÉRIFIE SI ON A ACHETÉ LE CHAMP ---
+            if not field["bought"]:
+                continue
+            # ---------------------------------------------------------
+
             if day <= self.field_busy_until.get(index, -1):
                 continue
 
@@ -48,11 +52,6 @@ class Cultiver:
             needed_water = field.get("needed_water", 0)
             
             is_ready_to_harvest = (content != "NONE" and needed_water == 0)
-
-            # Petit log discret pour les champs actifs
-            if content != "NONE":
-                # print(f"   [CHAMP {index}] {content} | Eau: {needed_water}") 
-                pass
 
             if is_ready_to_harvest:
                 task_stock.append(index)
@@ -84,30 +83,23 @@ class Cultiver:
             if task_stock:
                 if not available_tractors:
                     continue
-
                 target_field = task_stock.pop(0)
                 tractor_id = available_tractors.pop(0)
-                
                 cmd = f"{emp_id} STOCKER {target_field} {tractor_id}"
                 commandes.append(cmd)
-                
                 lock = 5
                 self.employee_busy_until[emp_id] = day + lock
                 self.field_busy_until[target_field] = day + lock
                 self.tractor_busy_until[tractor_id] = day + lock
-                
                 print(f"   🚜 {emp_id} -> STOCKER Champ {target_field} (Tracteur {tractor_id})")
                 continue
 
             # --- B. ARROSER ---
             if task_water:
                 target_field = task_water.pop(0)
-                
                 cmd = f"{emp_id} ARROSER {target_field}"
                 commandes.append(cmd)
-                
                 lock = 2 
-                
                 self.employee_busy_until[emp_id] = day + lock
                 self.field_busy_until[target_field] = day + lock
                 print(f"   💧 {emp_id} -> ARROSE Champ {target_field}")
@@ -116,14 +108,11 @@ class Cultiver:
             # --- C. SEMER ---
             if task_plant and cash > 2000:
                 target_field = task_plant.pop(0)
-                
                 cmd = f"{emp_id} SEMER PATATE {target_field}"
                 commandes.append(cmd)
-                
                 lock = 5
                 self.employee_busy_until[emp_id] = day + lock
                 self.field_busy_until[target_field] = day + lock 
-                
                 cash -= 1000
                 print(f"   🌱 {emp_id} -> SEME Champ {target_field}")
                 continue
