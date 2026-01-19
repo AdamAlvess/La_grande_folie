@@ -1,6 +1,7 @@
 from ferme.cultiver import Cultiver
 from ferme.employer import GestionnairePersonnel 
 from ferme.usine import Usine
+from ferme.Finance_manager import FinanceManager 
 
 class FarmStrategy:
     def __init__(self, nom_ferme: str):
@@ -8,6 +9,7 @@ class FarmStrategy:
         self.cultivator = Cultiver()
         self.drh = GestionnairePersonnel(nom_ferme)
         self.chef_cuisine = Usine()
+        self.finance = FinanceManager()
 
     def jouer_tour(self, game_data: dict) -> list[str]:
         commandes: list[str] = []
@@ -19,14 +21,21 @@ class FarmStrategy:
         day = game_data["day"]
         cash = ma_ferme.get("cash", ma_ferme.get("money", 0))
 
-        # --- SPECIALISATION ---
+        # --- 0. FINANCE ---
+        # On récupère une LISTE d'actions (ex: ["ACHETER_CHAMP", "ACHETER_TRACTEUR"])
+        actions_finance = self.finance.get_manager_action(ma_ferme, day)
+        if actions_finance:
+            commandes.extend(actions_finance)
+            print(f"💰 [FINANCE] Actions : {actions_finance}")
+
+        # --- REPARTITION DES EQUIPES ---
         equipe_usine = []
-        # ID 4 et + -> CHAMPS
         equipe_champs = []
 
         for emp in ma_ferme["employees"]:
             e_id = int(emp["id"])
-            if e_id <= 3: # 1, 2 et 3
+            # On laisse 3 ouvriers à l'usine pour le rendement max des soupes
+            if e_id <= 3: 
                 equipe_usine.append(e_id)
             else:
                 equipe_champs.append(e_id)

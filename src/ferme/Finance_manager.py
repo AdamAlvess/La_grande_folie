@@ -1,7 +1,6 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List
 
 class FinanceManager:
-
     def __init__(self):
         self.PRICE_FIELD = 10_000
         self.PRICE_TRACTOR = 30_000
@@ -9,47 +8,52 @@ class FinanceManager:
         self.MAX_TRACTORS_GLOBAL = 50
         self.MAX_LOANS = 10
         self.LOAN_AMOUNT = 100_000
+        self.SECURITY_BUFFER = 10_000 
 
-        self.SECURITY_BUFFER__S_T_O_P = 15_000 
+    def get_manager_action(self, farm_data: Dict[str, Any], day: int) -> List[str]:
+        commandes = []
         
-
-    def get_manager_action(self, farm_data: Dict[str, Any], day: int) -> Optional[str]:
+        cash = farm_data.get("cash", 0)
+        fields = farm_data.get("fields", [])
+        tractors = farm_data.get("tractors", [])
+        loans = farm_data.get("loans", [])
+        employees = farm_data.get("employees", [])
         
-        cash_analysis = farm_data.get("cash", 0)
-        fields_analysis = farm_data.get("fields", [])
-        tractors_analysis = farm_data.get("tractors", [])
-        loans_analysis = farm_data.get("loans", [])
-        nb_employees = farm_data.get("employees", [])
+        # 1. COMPTER CE QU'ON A VRAIMENT (Correction du bug)
+        # On ne compte que les champs qui ont "bought" = True
+        nb_fields_bought = sum(1 for f in fields if f["bought"])
+        nb_tractors = len(tractors)
+        nb_loans = len(loans)
         
-        nb_fields_analysis = len(fields_analysis)
-        nb_tractors_analysis = len(tractors_analysis)
-        nb_loans_analysis = len(loans_analysis)
-        cash_min_available = 5000
-        payment_init_of_workers = 1000
-        payment_of_workers_With_marge = payment_init_of_workers * 1.2  
+        # On garde une copie locale du cash pour simuler les achats successifs
+        current_cash = cash 
 
+        # --- 2. GESTION DES EMPRUNTS ---
+        # On emprunte SEULEMENT si on est pauvre (< 5000) ET qu'on a de la marge de prêt
+        # Si on a 100 000 de cash, on n'emprunte pas !
+        if current_cash < 5000 and nb_loans < self.MAX_LOANS:
+             commandes.append(f"0 EMPRUNTER {self.LOAN_AMOUNT}")
+             current_cash += self.LOAN_AMOUNT
 
-        next_month_salary_burden = len(nb_employees) * payment_of_workers_With_marge  
-        available_cash = cash_analysis - self.SECURITY_BUFFER__S_T_O_P - next_month_salary_burden
+        # Sécurité : on garde de quoi payer les salaires avant d'investir
+        masse_salariale = len(employees) * 1200 # Marge large
+        cash_investissable = current_cash - self.SECURITY_BUFFER - masse_salariale
 
-        if day == 0 and nb_loans_analysis < 3:
-             return f"0 EMPRUNTER {self.LOAN_AMOUNT}"
-        
+        # --- 3. ACHAT DE CHAMPS (Boucle) ---
+        # Tant qu'on a moins de 5 champs et assez d'argent, on achète
+        while nb_fields_bought < self.MAX_FIELDS and cash_investissable >= self.PRICE_FIELD:
+            commandes.append("0 ACHETER_CHAMP")
+            cash_investissable -= self.PRICE_FIELD
+            nb_fields_bought += 1 # On simule l'achat pour la suite de la boucle
 
-        #PK PAS FAIRE DES BOUCLES ICI
-        if available_cash <= cash_min_available and nb_loans_analysis < self.MAX_LOANS:
-            return f"0 EMPRUNTER {self.LOAN_AMOUNT}"
+        # --- 4. ACHAT DE TRACTEURS (Boucle) ---
+        # Règle d'or : On veut AUTANT de tracteurs que de champs achetés
+        while nb_tractors < nb_fields_bought and nb_tractors < self.MAX_TRACTORS_GLOBAL:
+            if cash_investissable >= self.PRICE_TRACTOR:
+                commandes.append("0 ACHETER_TRACTEUR")
+                cash_investissable -= self.PRICE_TRACTOR
+                nb_tractors += 1
+            else:
+                break # Plus d'argent
 
-
-        if nb_fields_analysis < self.MAX_FIELDS:
-            if available_cash >= self.PRICE_FIELD:
-                return "0 ACHETER_CHAMP"
-
-    
-        if nb_tractors_analysis < self.MAX_TRACTORS_GLOBAL: #Vérif. nb max.
-            desired_tractors = nb_fields_analysis
-            if nb_tractors_analysis < desired_tractors:
-                if available_cash >= self.PRICE_TRACTOR:
-                    return "0 ACHETER_TRACTEUR"
-
-        return None
+        return commandes
