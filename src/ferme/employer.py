@@ -26,14 +26,13 @@ class GestionnairePersonnel:
             cible = nb_champs + 2
         else:
             cible = 0
-        # Règle absolue du jeu : pas plus de 300
         cible = min(cible, self.MAX_EMPLOYES)
 
         # On somme les salaires actuels pour voir si on survit au prochain paiement
         masse_salariale_totale = sum(e.get("salary", self.SALAIRE_BASE) for e in employes)
 
 
-        # ON EMBAUCHE
+        # EMBAUCHE
         if nb_employes < cible:
             if nb_employes >= self.MAX_EMPLOYES:
                 print("🛑 RH: Limite de 300 employés atteinte.")
@@ -47,7 +46,7 @@ class GestionnairePersonnel:
             else:
                 print(f"💸 RH: Pas assez de cash pour embaucher ({cash}€ dispo)")
 
-        # ON LICENCIE 
+        # LICENCIE 
         elif nb_employes > cible:
             #Virer celui qui a le plus gros salaire pour alléger la masse salariale
             # On trie les employés

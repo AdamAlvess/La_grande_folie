@@ -3,6 +3,7 @@ from ferme.minimal_logiciel import PlayerGameClient
 from ferme.employer import GestionnairePersonnel
 import pytest
 from ferme.cultiver import Cultiver
+from ferme.usine import Usine
 
 def test_client_demarrage_jour_0():
     """
@@ -203,7 +204,6 @@ def test_employe_1_bloque_au_debut(strat, ferme_base):
     ferme_base["fields"] = [{"content": "NONE", "needed_water": 0}]
     ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
     
-    # Au jour 3, il devrait être encore bloqué (lock jusqu'à 6)
     cmds = strat.execute(ferme_base, day=3, cash=5000)
     assert cmds == []
     
@@ -211,3 +211,69 @@ def test_employe_1_bloque_au_debut(strat, ferme_base):
     cmds = strat.execute(ferme_base, day=7, cash=5000)
     assert len(cmds) == 1
     assert "1 SEMER" in cmds[0]
+
+# --- FIXTURE SPÉCIFIQUE À L'USINE ---
+@pytest.fixture
+def usine():
+    """Crée une instance neuve de l'usine avant chaque test."""
+    return Usine()
+
+# --- TESTS DE LA FABRICATION DE SOUPE ---
+
+def test_usine_sans_stock(usine, ferme_base):
+    # SCÉNARIO : Pas de stock, donc pas de cuisine
+    ferme_base["soup_factory"]["stock"] = {"POTATO": 0}
+    ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+    
+    # excluded_ids=[] car aucun employé n'est pris par l'agriculture
+    cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+    
+    assert cmds == []
+
+def test_usine_cuisine_patate(usine, ferme_base):
+    # SCÉNARIO : Stock de patates disponible + Ouvrier libre
+    ferme_base["soup_factory"]["stock"] = {"POTATO": 100}
+    ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+    
+    cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+    
+    assert len(cmds) == 1
+    assert "1 CUISINER" in cmds[0]
+    
+    # Vérification du verrouillage mémoire (1 jour pour cuisiner)
+    # L'ouvrier doit être occupé jusqu'au jour 11 (10 + 1)
+    assert usine.employee_busy_until[1] == 11
+
+def test_usine_evite_conflit_agricole(usine, ferme_base):
+    # SCÉNARIO : L'ouvrier 1 est pris par les champs, l'usine doit prendre le 2
+    ferme_base["soup_factory"]["stock"] = {"POTATO": 100}
+    ferme_base["employees"] = [
+        {"id": 1, "action": "IDLE"},
+        {"id": 2, "action": "IDLE"}
+    ]
+    
+    # On simule que l'ID 1 a été utilisé par Cultiver
+    cmds = usine.execute(ferme_base, day=10, excluded_ids=[1])
+    
+    assert len(cmds) == 1
+    assert "2 CUISINER" in cmds[0]
+
+def test_usine_ferme_bloquee(usine, ferme_base):
+    # SCÉNARIO : Ferme bannie
+    ferme_base["blocked"] = True
+    ferme_base["soup_factory"]["stock"] = {"POTATO": 1000}
+    ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+    
+    cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+    
+    assert cmds == []
+
+def test_usine_stock_mixte(usine, ferme_base):
+    # SCÉNARIO : Plusieurs légumes (le code ne choisit pas la recette, 
+    # il dit juste "CUISINER", le serveur fait le reste optimisé)
+    ferme_base["soup_factory"]["stock"] = {"POTATO": 50, "LEEK": 50}
+    ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+    
+    cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+    
+    assert "1 CUISINER" in cmds[0]

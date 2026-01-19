@@ -2,7 +2,7 @@ class Cultiver:
     def __init__(self):
         # --- MÉMOIRES ---
         self.employee_busy_until = {1: 6}  
-        self.field_busy_until = {3: 6} # <--- AJOUTE CETTE LIGNE
+        self.field_busy_until = {3: 6}  
         self.tractor_busy_until = {}     
 
    
