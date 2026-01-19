@@ -25,8 +25,8 @@ class FinanceManager:
         nb_tractors_analysis = len(tractors_analysis)
         nb_loans_analysis = len(loans_analysis)
         cash_min_available = 5000
-        payment_of_workers = 1000
-        payment_of_workers_With_marge = payment_of_workers * 1.2  
+        payment_init_of_workers = 1000
+        payment_of_workers_With_marge = payment_init_of_workers * 1.2  
 
 
         next_month_salary_burden = len(nb_employees) * payment_of_workers_With_marge  
@@ -37,7 +37,7 @@ class FinanceManager:
         
 
         #PK PAS FAIRE DES BOUCLES ICI
-        if available_cash < cash_min_available and nb_loans_analysis < self.MAX_LOANS:
+        if available_cash <= cash_min_available and nb_loans_analysis < self.MAX_LOANS:
             return f"0 EMPRUNTER {self.LOAN_AMOUNT}"
 
 
