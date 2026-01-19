@@ -1,200 +1,182 @@
-import random  # Nécessaire pour l'aléatoire
+from typing import Optional, List
 
 class Cultiver:
+    _MEMOIRE_OCCUPATION_EMP = {}
+    _MEMOIRE_OCCUPATION_CHAMP = {}
+    _MEMOIRE_OCCUPATION_TRACTEUR = {}
+    _DERNIER_JOUR_VU = -1
+
     def __init__(self):
-        """
-        Initialisation de la mémoire du cultivateur.
-        """
+        self.LEGUMES_CYCLE = ["PATATE", "POIREAU", "TOMATE", "OIGNON", "COURGETTE"]     
 
-        self.employee_busy_until = {1: 6}  
+    def _nettoyage_nouvelle_partie(self, day: int):
+        if day < Cultiver._DERNIER_JOUR_VU:
+            Cultiver._MEMOIRE_OCCUPATION_EMP.clear()
+            Cultiver._MEMOIRE_OCCUPATION_CHAMP.clear()
+            Cultiver._MEMOIRE_OCCUPATION_TRACTEUR.clear()
+        Cultiver._DERNIER_JOUR_VU = day
 
-        self.field_busy_until = {3: 6} 
-        self.tractor_busy_until = {}
-
-
-        # --- LISTE DES LÉGUMES DISPONIBLES ---
-        self.LEGUMES = ["PATATE", "POIREAU", "TOMATE", "OIGNON", "COURGETTE"]     
-
-    def gerer_cultiver(self, farm: dict, day: int, cash: int) -> list[str]:
-        """
-        MÉTHODE PRINCIPALE (Public API)
-        C'est la seule méthode que strategie.py a besoin d'appeler.
-        Elle orchestre tout le processus.
-        """
-        # 1. Vérification de sécurité (Anti-Ban)
+    def gerer_cultiver(self, farm: dict, day: int, cash: int, ids_autorises: Optional[List[int]] = None) -> List[str]:
+        self._nettoyage_nouvelle_partie(day)
+        if ids_autorises is None: 
+            ids_autorises = []
         if not self.is_safe_to_operate(farm):
             return []
 
-        if day == 0:
-            return []
-
-        # 2. Affichage du bilan (Logs)
         self.afficher_diagnostics(farm, day, cash)
 
-        # 3. Extraction des données brutes
         fields = farm.get("fields", [])
-        employees = farm.get("employees", [])
+        employees = farm.get("employees", [])   
         tractors = farm.get("tractors", [])
 
         besoins = self.analyser_champs(fields, day)
         
+        # On récupère les tracteurs VRAIMENT disponibles
         tracteurs_dispos = self.get_tracteurs_dispos(tractors, day)
-
-        commandes = self.assigner_taches(employees, day, cash, besoins, tracteurs_dispos)
         
-        return commandes
-
+        return self.assigner_taches(employees, day, cash, besoins, tracteurs_dispos, ids_autorises)
 
     def is_safe_to_operate(self, farm: dict) -> bool:
-        """Retourne False si la ferme est bloquée par le serveur."""
-        if farm.get("blocked", False):
-            return False
-        return True
+        return not farm.get("blocked", False)
 
     def afficher_diagnostics(self, farm: dict, day: int, cash: int):
-        """Affiche les logs de stock et de tracteurs."""
         soup_factory = farm.get("soup_factory", {})
         stock_usine = soup_factory.get("stock", {})
-        nb_patates = stock_usine.get("POTATO", 0)
-        
-        print(f"📊 [BILAN JOUR {day}] 🥔 Patates: {nb_patates} | 💰 Cash: {cash}")
-        
-        for t in farm.get("tractors", []):
-            content = t.get("content", "EMPTY")
-            if content != "EMPTY":
-                print(f"   🚜 Tracteur {t['id']} transporte : {content}")
+        total = sum(stock_usine.values())
+        print(f"📊 [BILAN JOUR {day}] 🥗 Stock Usine: {total} | 💰 Cash: {cash}")
 
     def analyser_champs(self, fields: list, day: int) -> dict:
-        """
-        Scanne tous les champs et retourne un dictionnaire de besoins.
-        Output: {'stock': [id, id], 'water': [id], 'plant': [id]}
-        """
-        besoins = {
-            "stock": [],
-            "water": [],
-            "plant": []
-        }
-
+        besoins = {"stock": [], "water": [], "plant": []}
         for index, field in enumerate(fields, start=1):
-            # 1. Est-ce que le champ est à nous ?
             if not field["bought"]:
                 continue
-
-            # 2. Est-ce que le champ est occupé (mémoire) ?
-            if day <= self.field_busy_until.get(index, -1):
+            if day <= Cultiver._MEMOIRE_OCCUPATION_CHAMP.get(index, -1): 
                 continue
 
-            # 3. Analyse de l'état
             content = field["content"]
-            needed_water = field.get("needed_water", 0)
+            needed = field.get("needed_water", 0)
             
-            # Règle : On récolte si ce n'est pas vide et qu'il n'y a plus besoin d'eau
-            is_ready_to_harvest = (content != "NONE" and needed_water == 0)
-
-            if is_ready_to_harvest:
+            if content != "NONE" and needed == 0:
                 besoins["stock"].append(index)
-            elif needed_water > 0 and content != "NONE":
+            elif needed > 0 and content != "NONE":
                 besoins["water"].append(index)
             elif content == "NONE":
                 besoins["plant"].append(index)
-        
         return besoins
 
     def get_tracteurs_dispos(self, tractors: list, day: int) -> list:
-        """Filtre les tracteurs pour ne garder que ceux disponibles (mémoire)."""
         dispos = []
         for t in tractors:
-            t_id = t["id"]
-            # Si le tracteur est marqué occupé dans notre carnet, on l'ignore
-            if day <= self.tractor_busy_until.get(t_id, -1):
+            t_id = int(t["id"])
+            
+            # 1. Vérif Mémoire (Le verrou local)
+            if day <= Cultiver._MEMOIRE_OCCUPATION_TRACTEUR.get(t_id, -1):
                 continue
+                
+            # 2. Vérif Contenu (Doit être vide)
+            content = t.get("content", "EMPTY")
+            if content != "EMPTY":
+                continue
+
+            # 3. Vérif Position (CORRECTION DU BUG 'FARM')
+            raw_loc = t.get("location", "FARM")
+            loc_id = 0 # Par défaut on dit qu'il est à la ferme (0)
+            
+            # On convertit le texte du serveur en ID numérique compréhensible
+            if isinstance(raw_loc, int):
+                loc_id = raw_loc
+            elif raw_loc == "FARM":
+                loc_id = 0
+            elif raw_loc == "SOUP_FACTORY":
+                loc_id = 6
+            elif isinstance(raw_loc, str) and raw_loc.startswith("FIELD"):
+                # Transforme "FIELD3" en 3
+                try:
+                    loc_id = int(raw_loc.replace("FIELD", ""))
+                except:  # noqa: E722
+                    loc_id = -1 # Erreur de lecture
+
+            # Si le tracteur est à l'usine (6), on ne peut pas le prendre
+            if loc_id == 6:
+                 continue
+                
             dispos.append(t_id)
         return dispos
 
-    def assigner_taches(self, employees: list, day: int, cash: int, besoins: dict, tracteurs_dispos: list) -> list[str]:
+    def assigner_taches(self, employees: list, day: int, cash: int, besoins: dict, tracteurs_dispos: list, ids_autorises: list) -> list[str]:
         commandes = []
         current_cash = cash
+        compteur_eau = 0 
+        ids_traites_ce_tour = set()
 
         for index_emp, emp in enumerate(employees, start=1):
-            emp_id = emp.get("id", index_emp)
+            emp_id = int(emp.get("id", index_emp))
             
-            if not self.is_employee_free(emp_id, emp, day):
+            if emp_id not in ids_autorises: 
+                continue
+            if emp_id in ids_traites_ce_tour: 
+                continue
+            if not self.is_employee_free(emp_id, emp, day): 
                 continue
 
-            # --- PRIORITÉ 1 : STOCKER ---
-            # CORRECTION : On met tout dans la même ligne avec 'and'.
-            # Si pas de tracteur, la condition est fausse, et on descend voir l'arrosage !
-            if besoins["stock"] and tracteurs_dispos:
-                target_field = besoins["stock"].pop(0)
-                tractor_id = tracteurs_dispos.pop(0)
+            # --- 1. STOCKER (PRIORITÉ ABSOLUE) ---
+            if besoins["stock"] and len(tracteurs_dispos) > 0:
+                target_field = besoins["stock"][0] 
                 
-                cmd = self.creer_commande_stocker(emp_id, target_field, tractor_id, day)
-                commandes.append(cmd)
-                continue # Tâche trouvée, on passe à l'employé suivant
+                # === LOGIQUE TRACTEUR ATTITRÉ ===
+                choix_tracteur = None
+                
+                if target_field in tracteurs_dispos:
+                    choix_tracteur = target_field
+                elif len(tracteurs_dispos) > 0:
+                    choix_tracteur = tracteurs_dispos[0]
+                
+                if choix_tracteur is not None:
+                    besoins["stock"].pop(0)
+                    tracteurs_dispos.remove(choix_tracteur) 
+                    
+                    lock_duration = 40 
+                    
+                    commandes.append(self.creer_commande(emp_id, f"STOCKER {target_field} {choix_tracteur}", day, lock_duration, "🚜 STOCKER", target_field, choix_tracteur))
+                    ids_traites_ce_tour.add(emp_id)
+                    continue 
 
-            # --- PRIORITÉ 2 : ARROSER ---
-            # L'ouvrier arrive ici si :
-            # - Soit il n'y avait rien à stocker
-            # - Soit il n'y avait PAS DE TRACTEUR (grâce à la correction au-dessus)
+            # --- 2. ARROSER ---
             if besoins["water"]:
-                target_field = besoins["water"].pop(0)
-                
-                cmd = self.creer_commande_arroser(emp_id, target_field, day)
-                commandes.append(cmd)
+                target = besoins["water"][compteur_eau % len(besoins["water"])]
+                lock_duration = target + 4 
+                commandes.append(self.creer_commande(emp_id, f"ARROSER {target}", day, lock_duration, "💧 ARROSE", target))
+                ids_traites_ce_tour.add(emp_id)
+                compteur_eau += 1
                 continue
 
-            # --- PRIORITÉ 3 : SEMER ---
+            # --- 3. SEMER ---
             if besoins["plant"] and current_cash > 2000:
-                target_field = besoins["plant"].pop(0)
-                legume_choisi = random.choice(self.LEGUMES)
+                target = besoins["plant"].pop(0)
+                index_legume = (target - 1) % len(self.LEGUMES_CYCLE)
+                leg = self.LEGUMES_CYCLE[index_legume]
                 
-                cmd = self.creer_commande_semer(emp_id, target_field, legume_choisi, day)
-                commandes.append(cmd)
+                lock_duration = target + 5 
+                commandes.append(self.creer_commande(emp_id, f"SEMER {leg} {target}", day, lock_duration, f"🌱 SEME ({leg})", target))
+                ids_traites_ce_tour.add(emp_id)
                 current_cash -= 1000
                 continue
                 
-            # Si on arrive là, l'ouvrier n'a vraiment rien trouvé aux champs.
-            # Il est donc dispo pour l'usine.
-
         return commandes
 
     def is_employee_free(self, emp_id: int, emp_data: dict, day: int) -> bool:
-        """Vérifie disponibilité Mémoire + Serveur."""
-        # 1. Mémoire interne
-        if day <= self.employee_busy_until.get(emp_id, -1):
+        if day <= Cultiver._MEMOIRE_OCCUPATION_EMP.get(emp_id, -1): 
             return False
-        # 2. État serveur (double sécurité)
-        action = emp_data.get("action", "IDLE")
-        if action != "IDLE" and action is not None:
+        if emp_data.get("action", "IDLE") != "IDLE":
             return False
         return True
 
-    def creer_commande_stocker(self, emp_id: int, field_id: int, tractor_id: int, day: int) -> str:
-        """Génère la commande et applique les verrous."""
-        # --- CORRECTION : PASSAGE A 15 JOURS ---
-        lock = 15 
+    def creer_commande(self, emp_id, action_str, day, lock_days, log_prefix, field_id, tractor_id=None):
+        Cultiver._MEMOIRE_OCCUPATION_EMP[emp_id] = day + lock_days
+        Cultiver._MEMOIRE_OCCUPATION_CHAMP[field_id] = day + lock_days
         
-        self.employee_busy_until[emp_id] = day + lock
-        self.field_busy_until[field_id] = day + lock
-        self.tractor_busy_until[tractor_id] = day + lock
+        if tractor_id:
+            Cultiver._MEMOIRE_OCCUPATION_TRACTEUR[tractor_id] = day + lock_days
         
-        print(f"   🚜 {emp_id} -> STOCKER Champ {field_id} (Tracteur {tractor_id}) [Verrou {lock}j]")
-        return f"{emp_id} STOCKER {field_id} {tractor_id}"
-
-    def creer_commande_arroser(self, emp_id: int, field_id: int, day: int) -> str:
-        """Génère la commande et applique les verrous (2 jours)."""
-        lock = 2
-        self.employee_busy_until[emp_id] = day + lock
-        self.field_busy_until[field_id] = day + lock
-        
-        print(f"   💧 {emp_id} -> ARROSE Champ {field_id}")
-        return f"{emp_id} ARROSER {field_id}"
-
-    def creer_commande_semer(self, emp_id: int, field_id: int, legume_choisi: str, day: int) -> str:
-        """Génère la commande et applique les verrous (5 jours)."""
-        lock = 5
-        self.employee_busy_until[emp_id] = day + lock
-        self.field_busy_until[field_id] = day + lock
-        
-        print(f"   🌱 {emp_id} -> SEME Champ {field_id} ({legume_choisi})")
-        return f"{emp_id} SEMER {legume_choisi} {field_id}"
+        print(f"   {log_prefix} Champ {field_id} [Verrou {lock_days}j]")
+        return f"{emp_id} {action_str}"
