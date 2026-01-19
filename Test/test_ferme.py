@@ -211,3 +211,4 @@ def test_employe_1_bloque_au_debut(strat, ferme_base):
     cmds = strat.execute(ferme_base, day=7, cash=5000)
     assert len(cmds) == 1
     assert "1 SEMER" in cmds[0]
+

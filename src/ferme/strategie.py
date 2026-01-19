@@ -36,7 +36,7 @@ class FarmStrategy:
 
         # --- MODULE 1 : AGRICULTURE (Cultiver) ---
         # (Suppose que ta classe Cultiver a bien une méthode execute)
-        commandes_agriculture = self.cultivator.execute(ma_ferme, day, cash)
+        commandes_agriculture = self.cultivator.gerer_cultiver(ma_ferme, day, cash)
         commandes.extend(commandes_agriculture)
         
         # --- MODULE 2 : Employés ---
