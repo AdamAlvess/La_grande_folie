@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List
 
 class FinanceManager:
 
@@ -10,59 +10,66 @@ class FinanceManager:
         self.MAX_TRACTORS_GLOBAL = 50
         self.MAX_LOANS = 10
         self.LOAN_AMOUNT = 100_000
-
-        # SÉCURITÉ
-        self.SECURITY_BUFFER__S_T_O_P = 15_000 
-        self.nb_emprunts_total = 0 # Compteur pour respecter la limite de 10
-
-    def get_manager_action(self, farm_data: Dict[str, Any], day: int) -> Optional[str]:
         
-        # 0. ARRÊT DES INVESTISSEMENTS (Fin de partie proche -> On garde le cash pour le score)
-        if day > 1680:
-            return None
+        # SÉCURITÉ (Buffer augmenté à 15k pour être sûr)
+        self.SECURITY_BUFFER = 15_000 
 
+    def get_manager_action(self, farm_data: Dict[str, Any], day: int) -> List[str]:
+        commandes = []
+        
         # 1. ANALYSE DES DONNÉES
-        cash_analysis = farm_data.get("cash", 0)
-        fields_analysis = farm_data.get("fields", [])
-        tractors_analysis = farm_data.get("tractors", [])
-        loans_analysis = farm_data.get("loans", [])
-        employees_list = farm_data.get("employees", [])
+        cash = farm_data.get("cash", 0)
+        fields = farm_data.get("fields", [])
+        tractors = farm_data.get("tractors", [])
+        loans = farm_data.get("loans", [])
+        employees = farm_data.get("employees", [])
         
-        nb_fields_analysis = len(fields_analysis)
-        nb_tractors_analysis = len(tractors_analysis)
+        # On compte ce qu'on possède
+        # Note: len(fields) suffit car la liste ne contient que les champs achetés
+        nb_fields_bought = len(fields) 
+        nb_tractors = len(tractors)
+        nb_loans = len(loans)
         
-        # 2. CALCUL DU CASH RÉELLEMENT DISPONIBLE
-        # Salaire : 1000 de base + marge sécu pour l'augmentation mensuelle
-        payment_of_workers_With_marge = 1200  
-        next_month_salary_burden = len(employees_list) * payment_of_workers_With_marge
+        # On simule le cash actuel pour enchaîner les achats dans la même journée
+        current_cash = cash 
+
+        # --- 2. CALCUL DES CHARGES (L'amélioration cruciale) ---
+        # Si on ne compte pas ça, on dépense trop et on meurt le lendemain
+        mensualite_emprunts = sum([int((l["amount"] * 1.10) / 24) for l in loans])
+        salaire_previsionnel = len(employees) * 1200 # 1000 + marge
         
-        # Remboursement Emprunts : Formule (Montant * 1.10) / 24 mois
-        # On doit soustraire ça du cash dispo sinon on ne pourra pas payer la banque !
-        monthly_loan_repayment = sum([int((loan["amount"] * 1.10) / 24) for loan in loans_analysis])
+        charges_incompressibles = mensualite_emprunts + salaire_previsionnel + self.SECURITY_BUFFER
 
-        # Cash - Sécurité - Salaires à venir - Mensualité crédit
-        available_cash = cash_analysis - self.SECURITY_BUFFER__S_T_O_P - next_month_salary_burden - monthly_loan_repayment
+        # --- 3. GESTION DES EMPRUNTS (SURVIE) ---
+        # Si on est pauvre OU au jour 0, on emprunte
+        if (current_cash < self.SECURITY_BUFFER or (day == 0 and current_cash <= 1000)) and nb_loans < self.MAX_LOANS:
+             # Correction format: on s'assure que c'est bien une chaîne propre
+             cmd = f"0 EMPRUNTER {self.LOAN_AMOUNT}"
+             commandes.append(cmd)
+             current_cash += self.LOAN_AMOUNT
 
-        # --- ARBRE DE DÉCISION (Priorité absolue à la survie) ---
-        
-        # A. SURVIE : EMPRUNTER SI TRÉSORERIE BASSE (OU JOUR 0)
-        # Si on est sous le buffer OU qu'on est au jour 0 avec peu de cash
-        if (cash_analysis < self.SECURITY_BUFFER__S_T_O_P) or (day == 0 and cash_analysis <= 1000):
-            if self.nb_emprunts_total < self.MAX_LOANS:
-                self.nb_emprunts_total += 1
-                return f"0 EMPRUNTER {self.LOAN_AMOUNT}"
+        # --- 4. CALCUL DU CASH INVESTISSABLE ---
+        # On ne dépense que ce qui dépasse de nos charges
+        cash_investissable = current_cash - charges_incompressibles
 
-        # B. EXPANSION : ACHETER CHAMP
-        if nb_fields_analysis < self.MAX_FIELDS:
-            if available_cash >= self.PRICE_FIELD:
-                return "0 ACHETER_CHAMP"
+        # Arrêt des investissements vers la fin du jeu (Jour 1680+)
+        if day > 1680:
+            return commandes
 
-        # C. OPTIMISATION : ACHETER TRACTEUR
-        # Règle : Pas plus de tracteurs que de champs (inutile)
-        if nb_tractors_analysis < self.MAX_TRACTORS_GLOBAL: 
-            desired_tractors = nb_fields_analysis
-            if nb_tractors_analysis < desired_tractors:
-                if available_cash >= self.PRICE_TRACTOR:
-                    return "0 ACHETER_TRACTEUR"
+        # --- 5. ACHAT DE CHAMPS ---
+        while nb_fields_bought < self.MAX_FIELDS and cash_investissable >= self.PRICE_FIELD:
+            commandes.append("0 ACHETER_CHAMP")
+            cash_investissable -= self.PRICE_FIELD
+            nb_fields_bought += 1 
 
-        return None
+        # --- 6. ACHAT DE TRACTEURS ---
+        # On n'achète pas plus de tracteurs que de champs
+        while nb_tractors < nb_fields_bought and nb_tractors < self.MAX_TRACTORS_GLOBAL:
+            if cash_investissable >= self.PRICE_TRACTOR:
+                commandes.append("0 ACHETER_TRACTEUR")
+                cash_investissable -= self.PRICE_TRACTOR
+                nb_tractors += 1
+            else:
+                break 
+
+        return commandes
