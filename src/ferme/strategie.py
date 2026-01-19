@@ -12,25 +12,16 @@ class FarmStrategy:
         self.chef_cuisine = Usine()
 
     def _extraire_ids_occupes(self, commandes: list[str]) -> list[int]:
-        """
-        Petite fonction pour lire les commandes d'agriculture (ex: '10 SEMER...')
-        et savoir quels employés sont déjà pris.
-        """
         ids = []
         for cmd in commandes:
             parts = cmd.split()
-            # Si la commande commence par un ID d'employé (pas 0 qui est la ferme)
             if parts[0].isdigit() and parts[0] != "0":
                 ids.append(int(parts[0]))
         return ids
 
     def jouer_tour(self, game_data: dict) -> list[str]:
-        """
-        Orchestre les différents modules de la ferme.
-        """
         commandes: list[str] = []
         
-        # 1. Récupération de ma ferme
         ma_ferme = None
         for ferme in game_data["farms"]:
             if ferme["name"] == self.nom_ferme:
@@ -40,29 +31,46 @@ class FarmStrategy:
         if not ma_ferme:
             return []
         
-        # --- SÉCURITÉ GLOBALE ---
         if ma_ferme.get("blocked", False):
-            print(f"🛑 [STRATÉGIE] Ferme bloquée au jour {game_data['day']}. Silence total.")
+            print(f"🛑 [STRATÉGIE] Ferme bloquée au jour {game_data['day']}.")
             return []
 
-        # Données utiles
         day = game_data["day"]
         cash = ma_ferme.get("cash", ma_ferme.get("money", 0))
 
-        # --- MODULE 1 : AGRICULTURE (Cultiver) ---
-        # (Suppose que ta classe Cultiver a bien une méthode execute)
-        commandes_agriculture = self.cultivator.execute(ma_ferme, day, cash)
+        # --- 1. AGRICULTURE ---
+        commandes_agriculture = self.cultivator.gerer_cultiver(ma_ferme, day, cash)
         commandes.extend(commandes_agriculture)
         
-        # # --- MODULE 2 : USINE (Cuisiner) ---         
+        # --- 2. USINE (Sécurité renforcée + Debug) ---
+        
+        # 1. Ceux qui travaillent ce tour-ci
+        ids_commandes_jour = self._extraire_ids_occupes(commandes_agriculture)
+        
+        # 2. Ceux bloqués dans TA mémoire
+        ids_memoire = [
+            int(e_id) for e_id, fin in self.cultivator.employee_busy_until.items()
+            if fin >= day
+        ]
+        
+        # 3. Ceux bloqués par le SERVEUR (Sécurité ultime)
+        # On force la conversion en int pour être sûr
+        ids_serveur_occupes = []
+        for emp in ma_ferme["employees"]:
+            if emp.get("action", "IDLE") != "IDLE":
+                ids_serveur_occupes.append(int(emp["id"]))
+        
+        # On combine tout (set élimine les doublons)
+        tous_les_exclus = list(set(ids_commandes_jour + ids_memoire + ids_serveur_occupes))
 
-        # ids_aux_champs = self._extraire_ids_occupes(commandes_agriculture)
-        # commandes_usine = self.chef_cuisine.execute(ma_ferme, day, excluded_ids=ids_aux_champs)
-        # commandes.extend(commandes_usine)
+        # DEBUG : Pour comprendre pourquoi ça plante, décommentez la ligne ci-dessous
+        # print(f"🚫 EXCLUS USINE J{day}: {tous_les_exclus}")
 
-        # --- MODULE 3 : Employés ---
+        commandes_usine = self.chef_cuisine.execute(ma_ferme, day, excluded_ids=tous_les_exclus)
+        commandes.extend(commandes_usine)
+
+        # --- 3. RH ---
         commandes_rh = self.drh.gerer_effectifs(ma_ferme)
         commandes.extend(commandes_rh)
 
-        
         return commandes
