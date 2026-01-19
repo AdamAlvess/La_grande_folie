@@ -1,3 +1,5 @@
+import random  # Nécessaire pour l'aléatoire
+
 class Cultiver:
     def __init__(self):
         """
@@ -7,7 +9,10 @@ class Cultiver:
         # On garde les sécurités initiales pour le scénario du Jour 0
         self.employee_busy_until = {1: 6}  
         self.field_busy_until = {3: 6} 
-        self.tractor_busy_until = {}     
+        self.tractor_busy_until = {}
+
+        # --- LISTE DES LÉGUMES DISPONIBLES ---
+        self.LEGUMES = ["PATATE", "POIREAU", "TOMATE", "OIGNON", "COURGETTE"]     
 
     def gerer_cultiver(self, farm: dict, day: int, cash: int) -> list[str]:
         """
@@ -142,8 +147,11 @@ class Cultiver:
             # --- PRIORITÉ 3 : SEMER (Investissement) ---
             if besoins["plant"] and current_cash > 2000:
                 target_field = besoins["plant"].pop(0)
+
+                # --- CHOIX ALÉATOIRE DU LÉGUME ---
+                legume_choisi = random.choice(self.LEGUMES)
                 
-                cmd = self.creer_commande_semer(emp_id, target_field, day)
+                cmd = self.creer_commande_semer(emp_id, target_field, legume_choisi, day)
                 commandes.append(cmd)
                 current_cash -= 1000 # On déduit virtuellement le coût
                 continue
@@ -160,10 +168,6 @@ class Cultiver:
         if action != "IDLE" and action is not None:
             return False
         return True
-
-    # =========================================================================
-    # --- GÉNÉRATEURS DE COMMANDES (Avec Verrouillage) ---
-    # =========================================================================
 
     def creer_commande_stocker(self, emp_id: int, field_id: int, tractor_id: int, day: int) -> str:
         """Génère la commande et applique les verrous (5 jours)."""
@@ -184,11 +188,11 @@ class Cultiver:
         print(f"   💧 {emp_id} -> ARROSE Champ {field_id}")
         return f"{emp_id} ARROSER {field_id}"
 
-    def creer_commande_semer(self, emp_id: int, field_id: int, day: int) -> str:
+    def creer_commande_semer(self, emp_id: int, field_id: int, legume_choisi: str, day: int) -> str:
         """Génère la commande et applique les verrous (5 jours)."""
         lock = 5
         self.employee_busy_until[emp_id] = day + lock
         self.field_busy_until[field_id] = day + lock
         
-        print(f"   🌱 {emp_id} -> SEME Champ {field_id}")
-        return f"{emp_id} SEMER PATATE {field_id}"
+        print(f"   🌱 {emp_id} -> SEME Champ {field_id} ({legume_choisi})")
+        return f"{emp_id} SEMER {legume_choisi} {field_id}"
