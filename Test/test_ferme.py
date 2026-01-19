@@ -1,8 +1,11 @@
 from unittest.mock import MagicMock, patch
 from ferme.minimal_logiciel import PlayerGameClient
+from ferme.Finance_manager import FinanceManager
 from ferme.employer import GestionnairePersonnel
-import pytest
 from ferme.cultiver import Cultiver
+from ferme.usine import Usine
+import pytest
+
 
 def test_client_demarrage_jour_0():
     """
@@ -37,6 +40,150 @@ def test_client_demarrage_jour_0():
     assert commandes.count("0 EMPLOYER") == 2
     assert "1 SEMER PATATE 3" in commandes
 
+# --- TEST FINANCE MANAGER INDÉPENDANT ---
+
+class TestFinance:
+    @pytest.fixture
+    def manager(self):
+        return FinanceManager()
+
+    # JOUR 0
+    def test_jour_0_doit_emprunter_massivement(self, manager):
+        fake_data = {
+            "cash": 1_000,
+            "fields": [],
+            "tractors": [],
+            "loans": [], 
+            "employees": []
+        }
+        # Au jour 0, priorité absolue à l'argent
+        action = manager.get_manager_action(fake_data, day=0)
+        assert action == "0 EMPRUNTER 100000"
+
+    # SURVIE FINANCIÈRE
+    def test_doit_emprunter_si_tresorerie_basse(self, manager):
+        # DOIT EMPRUNTER OU NON ??? Oui car 12k < 15k buffer + charges
+        fake_data = {
+            "cash": 12_000,
+            "fields": [],
+            "tractors": [],
+            "loans": [],
+            "employees": [] 
+        }
+        action = manager.get_manager_action(fake_data, day=10)
+        assert action == "0 EMPRUNTER 100000"
+
+    # LES CHAMPS
+    def test_achat_champ_si_assez_argent(self, manager):
+        # dans l'idée, si j'ai au moins 15K + charges, je peux acheter un champ
+        fake_data = {
+            "cash": 40000,
+            "fields": [{"id": 1}], # J'ai 1 champ, je peux en avoir jusqu'à 5 max
+            "tractors": [{"id": 1}], # J'ai déjà un tracteur pour ce champ
+            "loans": [],
+            "employees": []
+        }
+        action = manager.get_manager_action(fake_data, day=5)
+        assert action == "0 ACHETER_CHAMP"
+
+    def test_stop_achat_champ_si_max_atteint(self, manager):
+        # J'ai déjà 5 champs (Max)
+        fake_data = {
+            "cash": 100_000,
+            "fields": [{"id": i} for i in range(5)], 
+            "tractors": [],
+            "loans": [],
+            "employees": []
+        }
+        action = manager.get_manager_action(fake_data, day=5)
+        # NE DOIT PAS acheter de champ. DOIT ACHETER TRACTEUR
+        assert action == "0 ACHETER_TRACTEUR"
+
+    # TRACTEURS
+    def test_achat_tracteur_si_besoin(self, manager): 
+        # J'ai 2 champs mais 0 tracteur -> Besoin de tracteur
+        fake_data = {
+            "cash": 80000, # Large niveau argent
+            "fields": [{"id": 1}, {"id": 2}],
+            "tractors": [],
+            "loans": [],
+            "employees": []
+        }
+        action = manager.get_manager_action(fake_data, day=5)
+        assert action == "0 ACHETER_TRACTEUR"
+
+    def test_tracteur_limite_globale_50(self, manager):
+        # J'ai déjà 50 tracteurs -> IN-TER-DICTION d'en acheter
+        fake_data = {
+            "cash": 900000,
+            "fields": [{"id": i} for i in range(5)],
+            "tractors": [{"id": i} for i in range(50)], 
+            "loans": [],
+            "employees": []
+        }
+        action = manager.get_manager_action(fake_data, day=5)
+        assert action is None # On est au max partout
+
+    # --- TEST 5 : SALAIRES ET SÉCURITÉ ---
+    def test_salaires_bloquent_investissements(self, manager):
+        """Test crucial : vérifie que le salaire des employés est déduit du cash dispo."""
+        # CALCUL MATHÉMATIQUE : Cash total : 35 000
+        # Buffer sécu : - 15 000
+        # Salaires : 10 employés * 1200 (marge) = - 12 000
+        # Cash vraiment disponible = 35k - 15k - 12k = 8 000
+        # 8 000 < 10 000 (Prix champ) -> On ne peut PAS acheter le champ
+        
+        fake_data = {
+            "cash": 35000,
+            "fields": [],
+            "tractors": [],
+            "loans": [],
+            "employees": [{"id": i} for i in range(10)]
+        }
+        action = manager.get_manager_action(fake_data, day=5)
+        assert action is None
+        assert action == "0 ACHETER_TRACTEUR"
+
+def test_tracteur_limite_globale_50(self):
+    # J'ai déjà 50 tracteurs -> IN-TER-DICTION d'en acheter
+    fake_data = {
+        "cash": 900000,
+        "fields": [{"id": i} for i in range(5)],
+        "tractors": [{"id": i} for i in range(50)], # 50 tracteurs
+        "loans": [{"amount": 100000}] * 3,
+        "employees": []
+    }
+
+    action = self.manager.get_manager_action(fake_data, day=5)
+    
+    assert action is None # Rien à faire, on est au max partout
+
+# --- TEST 5 : SALAIRES ET SÉCURITÉ ---
+def test_salaires_bloquent_investissements(self):
+    """Test crucial : vérifie que le salaire des employés est déduit du cash dispo."""
+    
+    # CALCUL MATHÉMATIQUE : Cash total : 35 000
+    #Buffer sécu : - 15 000
+    # Salaires : 10 employés * 1200 (marge) = - 12 000
+    
+    # Cash vraiment disponible = 35k - 15k - 12k = 8 000
+    
+    # 8 000 < 10 000 (Prix champ) -> On ne peut PAS acheter le champ
+    # 8 000 > 5 000 (Seuil emprunt) -> On n'a pas besoin d'emprunter
+
+    # Résultat attendu : None
+    
+    fake_data = {
+        "cash": 35000,
+        "fields": [],
+        "tractors": [],
+        "loans": [{"amount": 100000}] * 3, # Pas d'emprunt possible
+        "employees": [{"id": i} for i in range(10)]
+    }
+
+    action = self.manager.get_manager_action(fake_data, day=5)
+    
+    assert action is None
 
 def test_rh_doit_embaucher():
     """
@@ -82,132 +229,211 @@ def test_rh_doit_licencier():
     assert "0 LICENCIER 20" in commandes
 
 
-# --- FIXTURES (Données de base pour les tests) ---
-@pytest.fixture
-def strat():
-    """Crée une instance toute neuve de Cultiver avant chaque test."""
-    return Cultiver()
+    # --- FIXTURES (Données de base pour les tests) ---
+    @pytest.fixture
+    def strat():
+        """Crée une instance toute neuve de Cultiver avant chaque test."""
+        return Cultiver()
 
-@pytest.fixture
-def ferme_base():
-    """Une ferme standard pour les tests."""
-    return {
-        "blocked": False,
-        "money": 10000,
-        "fields": [],
-        "employees": [],
-        "tractors": [],
-        "soup_factory": {"stock": {"POTATO": 0}}
-    }
+    @pytest.fixture
+    def ferme_base():
+        """Une ferme standard pour les tests."""
+        return {
+            "blocked": False,
+            "money": 10000,
+            "fields": [],
+            "employees": [],
+            "tractors": [],
+            "soup_factory": {"stock": {"POTATO": 0}}
+        }
 
-# --- TESTS ---
+    # --- TESTS ---
 
-def test_jour_0_ne_fait_rien(strat, ferme_base):
-    # Au jour 0, on ne doit rien renvoyer
-    cmds = strat.execute(ferme_base, day=0, cash=10000)
-    assert cmds == []
+    def test_jour_0_ne_fait_rien(strat, ferme_base):
+        # Au jour 0, on ne doit rien renvoyer
+        cmds = strat.execute(ferme_base, day=0, cash=10000)
+        assert cmds == []
 
-def test_ferme_bloquee(strat, ferme_base):
-    # Si la ferme est bloquée, silence radio
-    ferme_base["blocked"] = True
-    cmds = strat.execute(ferme_base, day=10, cash=10000)
-    assert cmds == []
+    def test_ferme_bloquee(strat, ferme_base):
+        # Si la ferme est bloquée, silence radio
+        ferme_base["blocked"] = True
+        cmds = strat.execute(ferme_base, day=10, cash=10000)
+        assert cmds == []
 
-def test_semer_patate(strat, ferme_base):
-    # SCÉNARIO : Champ 2 vide, Employé 2 libre, Assez d'argent
-    ferme_base["fields"] = [
-        {"content": "NONE", "needed_water": 0} # Champ 1 (ignoré par défaut par Cultiver?) Non, il prend tout maintenant
-    ]
-    # Attention: dans ton __init__, l'employé 1 est bloqué jusqu'au jour 6 !
-    # On utilise donc l'employé 2 pour ce test.
-    ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
-    
-    cmds = strat.execute(ferme_base, day=10, cash=5000)
-    
-    assert len(cmds) == 1
-    assert "2 SEMER PATATE 1" in cmds[0]
-    
-    # Vérification du verrouillage mémoire (5 jours pour semer)
-    assert strat.employee_busy_until[2] == 10 + 5
-    assert strat.field_busy_until[1] == 10 + 5
+    def test_semer_patate(strat, ferme_base):
+        # SCÉNARIO : Champ 2 vide, Employé 2 libre, Assez d'argent
+        ferme_base["fields"] = [
+            {"content": "NONE", "needed_water": 0} # Champ 1 (ignoré par défaut par Cultiver?) Non, il prend tout maintenant
+        ]
+        # Attention: dans ton __init__, l'employé 1 est bloqué jusqu'au jour 6 !
+        # On utilise donc l'employé 2 pour ce test.
+        ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
+        
+        cmds = strat.execute(ferme_base, day=10, cash=5000)
+        
+        assert len(cmds) == 1
+        assert "2 SEMER PATATE 1" in cmds[0]
+        
+        # Vérification du verrouillage mémoire (5 jours pour semer)
+        assert strat.employee_busy_until[2] == 10 + 5
+        assert strat.field_busy_until[1] == 10 + 5
 
-def test_pas_d_argent_pour_semer(strat, ferme_base):
-    # SCÉNARIO : Champ vide mais seulement 100€ en poche (il faut 1000)
-    ferme_base["fields"] = [{"content": "NONE", "needed_water": 0}]
-    ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
-    
-    cmds = strat.execute(ferme_base, day=10, cash=100) # Pauvre
-    
-    assert cmds == [] # Rien ne se passe
+    def test_pas_d_argent_pour_semer(strat, ferme_base):
+        # SCÉNARIO : Champ vide mais seulement 100€ en poche (il faut 1000)
+        ferme_base["fields"] = [{"content": "NONE", "needed_water": 0}]
+        ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
+        
+        cmds = strat.execute(ferme_base, day=10, cash=100) # Pauvre
+        
+        assert cmds == [] # Rien ne se passe
 
-def test_arroser_champ(strat, ferme_base):
-    # SCÉNARIO : Champ 1 a besoin d'eau
-    ferme_base["fields"] = [{"content": "POTATO", "needed_water": 5}]
-    ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
-    
-    cmds = strat.execute(ferme_base, day=10, cash=5000)
-    
-    assert len(cmds) == 1
-    assert "2 ARROSER 1" in cmds[0]
-    
-    # Vérification du verrouillage mémoire (2 jours pour arroser)
-    assert strat.employee_busy_until[2] == 10 + 2
+    def test_arroser_champ(strat, ferme_base):
+        # SCÉNARIO : Champ 1 a besoin d'eau
+        ferme_base["fields"] = [{"content": "POTATO", "needed_water": 5}]
+        ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
+        
+        cmds = strat.execute(ferme_base, day=10, cash=5000)
+        
+        assert len(cmds) == 1
+        assert "2 ARROSER 1" in cmds[0]
+        
+        # Vérification du verrouillage mémoire (2 jours pour arroser)
+        assert strat.employee_busy_until[2] == 10 + 2
 
-def test_stocker_recolte(strat, ferme_base):
-    # SCÉNARIO : Champ 1 prêt (Eau=0, Contenu!=NONE) + Tracteur dispo
-    ferme_base["fields"] = [{"content": "POTATO", "needed_water": 0}]
-    ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
-    ferme_base["tractors"] = [{"id": 1, "content": "EMPTY"}]
-    
-    cmds = strat.execute(ferme_base, day=10, cash=5000)
-    
-    assert len(cmds) == 1
-    assert "2 STOCKER 1 1" in cmds[0] # Emp 2, Champ 1, Tracteur 1
-    
-    # Vérification du verrouillage mémoire (5 jours pour stocker)
-    assert strat.tractor_busy_until[1] == 10 + 5
+    def test_stocker_recolte(strat, ferme_base):
+        # SCÉNARIO : Champ 1 prêt (Eau=0, Contenu!=NONE) + Tracteur dispo
+        ferme_base["fields"] = [{"content": "POTATO", "needed_water": 0}]
+        ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
+        ferme_base["tractors"] = [{"id": 1, "content": "EMPTY"}]
+        
+        cmds = strat.execute(ferme_base, day=10, cash=5000)
+        
+        assert len(cmds) == 1
+        assert "2 STOCKER 1 1" in cmds[0] # Emp 2, Champ 1, Tracteur 1
+        
+        # Vérification du verrouillage mémoire (5 jours pour stocker)
+        assert strat.tractor_busy_until[1] == 10 + 5
 
-def test_stocker_sans_tracteur(strat, ferme_base):
-    # SCÉNARIO : Champ prêt MAIS aucun tracteur
-    ferme_base["fields"] = [{"content": "POTATO", "needed_water": 0}]
-    ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
-    ferme_base["tractors"] = [] # Liste vide
-    
-    cmds = strat.execute(ferme_base, day=10, cash=5000)
-    
-    assert cmds == [] # On ne peut pas stocker sans tracteur
+    def test_stocker_sans_tracteur(strat, ferme_base):
+        # SCÉNARIO : Champ prêt MAIS aucun tracteur
+        ferme_base["fields"] = [{"content": "POTATO", "needed_water": 0}]
+        ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
+        ferme_base["tractors"] = [] # Liste vide
+        
+        cmds = strat.execute(ferme_base, day=10, cash=5000)
+        
+        assert cmds == [] # On ne peut pas stocker sans tracteur
 
-def test_employe_occupe_serveur(strat, ferme_base):
-    # SCÉNARIO : L'employé travaille déjà selon le serveur
-    ferme_base["fields"] = [{"content": "POTATO", "needed_water": 5}]
-    ferme_base["employees"] = [{"id": 2, "action": "WATER"}] # Il bosse déjà
-    
-    cmds = strat.execute(ferme_base, day=10, cash=5000)
-    
-    assert cmds == [] # On ne doit pas lui donner d'ordre
+    def test_employe_occupe_serveur(strat, ferme_base):
+        # SCÉNARIO : L'employé travaille déjà selon le serveur
+        ferme_base["fields"] = [{"content": "POTATO", "needed_water": 5}]
+        ferme_base["employees"] = [{"id": 2, "action": "WATER"}] # Il bosse déjà
+        
+        cmds = strat.execute(ferme_base, day=10, cash=5000)
+        
+        assert cmds == [] # On ne doit pas lui donner d'ordre
 
-def test_employe_occupe_memoire(strat, ferme_base):
-    # SCÉNARIO : L'employé est libre pour le serveur, mais notre mémoire dit NON
-    ferme_base["fields"] = [{"content": "POTATO", "needed_water": 5}]
-    ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
-    
-    # On simule qu'il est occupé jusqu'au jour 15
-    strat.employee_busy_until[2] = 15
-    
-    cmds = strat.execute(ferme_base, day=10, cash=5000)
-    
-    assert cmds == []
+    def test_employe_occupe_memoire(strat, ferme_base):
+        # SCÉNARIO : L'employé est libre pour le serveur, mais notre mémoire dit NON
+        ferme_base["fields"] = [{"content": "POTATO", "needed_water": 5}]
+        ferme_base["employees"] = [{"id": 2, "action": "IDLE"}]
+        
+        # On simule qu'il est occupé jusqu'au jour 15
+        strat.employee_busy_until[2] = 15
+        
+        cmds = strat.execute(ferme_base, day=10, cash=5000)
+        
+        assert cmds == []
 
-def test_employe_1_bloque_au_debut(strat, ferme_base):
-    # SCÉNARIO : Vérifier que l'employé 1 est bien ignoré au début (fix J0)
-    ferme_base["fields"] = [{"content": "NONE", "needed_water": 0}]
-    ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
-    
-    # Au jour 3, il devrait être encore bloqué (lock jusqu'à 6)
-    cmds = strat.execute(ferme_base, day=3, cash=5000)
-    assert cmds == []
-    
-    # Au jour 7, il doit être libre
-    cmds = strat.execute(ferme_base, day=7, cash=5000)
-    assert len(cmds) == 1
-    assert "1 SEMER" in cmds[0]
+    def test_employe_1_bloque_au_debut(strat, ferme_base):
+        # SCÉNARIO : Vérifier que l'employé 1 est bien ignoré au début (fix J0)
+        ferme_base["fields"] = [{"content": "NONE", "needed_water": 0}]
+        ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+        
+        cmds = strat.execute(ferme_base, day=3, cash=5000)
+        assert cmds == []
+        
+        # Au jour 7, il doit être libre
+        cmds = strat.execute(ferme_base, day=7, cash=5000)
+        assert len(cmds) == 1
+        assert "1 SEMER" in cmds[0]
+
+    # --- FIXTURE SPÉCIFIQUE À L'USINE ---
+    @pytest.fixture
+    def usine():
+        """Crée une instance neuve de l'usine avant chaque test."""
+        return Usine()
+
+    # --- TESTS DE LA FABRICATION DE SOUPE ---
+
+    def test_usine_sans_stock(usine, ferme_base):
+        # SCÉNARIO : Pas de stock, donc pas de cuisine
+        ferme_base["soup_factory"]["stock"] = {"POTATO": 0}
+        ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+        
+        # excluded_ids=[] car aucun employé n'est pris par l'agriculture
+        cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+        
+        assert cmds == []
+
+    def test_usine_cuisine_patate(usine, ferme_base):
+        # SCÉNARIO : Stock de patates disponible + Ouvrier libre
+        ferme_base["soup_factory"]["stock"] = {"POTATO": 100}
+        ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+        
+        cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+        
+        assert len(cmds) == 1
+        assert "1 CUISINER" in cmds[0]
+        
+        # Vérification du verrouillage mémoire (1 jour pour cuisiner)
+        # L'ouvrier doit être occupé jusqu'au jour 11 (10 + 1)
+        assert usine.employee_busy_until[1] == 11
+
+    def test_usine_evite_conflit_agricole(usine, ferme_base):
+        # SCÉNARIO : L'ouvrier 1 est pris par les champs, l'usine doit prendre le 2
+        ferme_base["soup_factory"]["stock"] = {"POTATO": 100}
+        ferme_base["employees"] = [
+            {"id": 1, "action": "IDLE"},
+            {"id": 2, "action": "IDLE"}
+        ]
+        
+        # On simule que l'ID 1 a été utilisé par Cultiver
+        cmds = usine.execute(ferme_base, day=10, excluded_ids=[1])
+        
+        assert len(cmds) == 1
+        assert "2 CUISINER" in cmds[0]
+
+    def test_usine_ferme_bloquee(usine, ferme_base):
+        # SCÉNARIO : Ferme bannie
+        ferme_base["blocked"] = True
+        ferme_base["soup_factory"]["stock"] = {"POTATO": 1000}
+        ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+        
+        cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+        
+        assert cmds == []
+
+    def test_usine_stock_mixte(usine, ferme_base):
+        # SCÉNARIO : Plusieurs légumes (le code ne choisit pas la recette, 
+        # il dit juste "CUISINER", le serveur fait le reste optimisé)
+        ferme_base["soup_factory"]["stock"] = {"POTATO": 50, "LEEK": 50}
+        ferme_base["employees"] = [{"id": 1, "action": "IDLE"}]
+        
+        cmds = usine.execute(ferme_base, day=10, excluded_ids=[])
+        
+        assert "1 CUISINER" in cmds[0]
+
+    def test_fin_de_partie_stop_investissements(self, manager):
+        """Vérifie qu'on arrête d'acheter à la fin pour garder le cash (Score)."""
+        fake_data = {
+            "cash": 1_000_000, # Riche
+            "fields": [],
+            "tractors": [],
+            "loans": [],
+            "employees": []
+        }
+        # Jour 1750 (Fin du jeu proche)
+        action = manager.get_manager_action(fake_data, day=1750)
+        assert action is None
+
