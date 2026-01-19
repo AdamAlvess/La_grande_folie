@@ -330,4 +330,5 @@ def test_employe_1_bloque_au_debut(strat, ferme_base):
     assert len(cmds) == 1
     assert "1 SEMER" in cmds[0]
 
+
     
