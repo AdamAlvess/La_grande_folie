@@ -1,9 +1,10 @@
-from typing import Optional, List
+import math
+from typing import Optional, Dict, Any, Tuple, List
 
 class Cultiver:
-    _MEMOIRE_OCCUPATION_EMP = {}
-    _MEMOIRE_OCCUPATION_CHAMP = {}
-    _MEMOIRE_OCCUPATION_TRACTEUR = {}
+    _MEMOIRE_OCCUPATION_EMP: dict[int, int] = {}
+    _MEMOIRE_OCCUPATION_CHAMP: dict[int, int] = {} 
+    _MEMOIRE_OCCUPATION_TRACTEUR: dict[int, int] = {}
     _DERNIER_JOUR_VU = -1
 
     def __init__(self):
@@ -16,167 +17,112 @@ class Cultiver:
             Cultiver._MEMOIRE_OCCUPATION_TRACTEUR.clear()
         Cultiver._DERNIER_JOUR_VU = day
 
-    def gerer_cultiver(self, farm: dict, day: int, cash: int, ids_autorises: Optional[List[int]] = None) -> List[str]:
+    # On retourne bien Tuple[List[str], int]
+    def gerer_un_champ_specifique(self, farm: dict, day: int, cash_dispo: int, target_field_id: int, assigned_workers: list[int], assigned_tractor_id: int) -> Tuple[List[str], int]:
         self._nettoyage_nouvelle_partie(day)
-        if ids_autorises is None: 
-            ids_autorises = []
-        if not self.is_safe_to_operate(farm):
-            return []
-
-        self.afficher_diagnostics(farm, day, cash)
+        
+        # ⚠️ ATTENTION AUX RETURN ICI ⚠️
+        if farm.get("blocked", False):
+            return [], 0 
 
         fields = farm.get("fields", [])
-        employees = farm.get("employees", [])   
+        if target_field_id - 1 >= len(fields): 
+            return [], 0  
+            
+        target_field_data = fields[target_field_id - 1] 
+        
+        employees = farm.get("employees", [])
         tractors = farm.get("tractors", [])
 
-        besoins = self.analyser_champs(fields, day)
-        
-        # On récupère les tracteurs VRAIMENT disponibles
-        tracteurs_dispos = self.get_tracteurs_dispos(tractors, day)
-        
-        return self.assigner_taches(employees, day, cash, besoins, tracteurs_dispos, ids_autorises)
+        # FIX 1 : TRACTEUR MANQUANT
+        tractor_obj = next((t for t in tractors if int(t["id"]) == assigned_tractor_id), None)
+        if tractor_obj is None:
+            return [], 0  # <--- C'EST SOUVENT CELUI-LA QUI PLANTE LE CODE
 
-    def is_safe_to_operate(self, farm: dict) -> bool:
-        return not farm.get("blocked", False)
-
-    def afficher_diagnostics(self, farm: dict, day: int, cash: int):
-        soup_factory = farm.get("soup_factory", {})
-        stock_usine = soup_factory.get("stock", {})
-        total = sum(stock_usine.values())
-        print(f"📊 [BILAN JOUR {day}] 🥗 Stock Usine: {total} | 💰 Cash: {cash}")
-
-    def analyser_champs(self, fields: list, day: int) -> dict:
-        besoins = {"stock": [], "water": [], "plant": []}
-        for index, field in enumerate(fields, start=1):
-            if not field["bought"]:
-                continue
-            if day <= Cultiver._MEMOIRE_OCCUPATION_CHAMP.get(index, -1): 
-                continue
-
-            content = field["content"]
-            needed = field.get("needed_water", 0)
-            
-            if content != "NONE" and needed == 0:
-                besoins["stock"].append(index)
-            elif needed > 0 and content != "NONE":
-                besoins["water"].append(index)
-            elif content == "NONE":
-                besoins["plant"].append(index)
-        return besoins
-
-    def get_tracteurs_dispos(self, tractors: list, day: int) -> list:
-        dispos = []
-        for t in tractors:
-            t_id = int(t["id"])
-            
-            # 1. Vérif Mémoire (Le verrou local)
-            if day <= Cultiver._MEMOIRE_OCCUPATION_TRACTEUR.get(t_id, -1):
-                continue
-                
-            # 2. Vérif Contenu (Doit être vide)
-            content = t.get("content", "EMPTY")
-            if content != "EMPTY":
-                continue
-
-            # 3. Vérif Position (CORRECTION DU BUG 'FARM')
-            raw_loc = t.get("location", "FARM")
-            loc_id = 0 # Par défaut on dit qu'il est à la ferme (0)
-            
-            # On convertit le texte du serveur en ID numérique compréhensible
-            if isinstance(raw_loc, int):
-                loc_id = raw_loc
-            elif raw_loc == "FARM":
-                loc_id = 0
-            elif raw_loc == "SOUP_FACTORY":
-                loc_id = 6
-            elif isinstance(raw_loc, str) and raw_loc.startswith("FIELD"):
-                # Transforme "FIELD3" en 3
-                try:
-                    loc_id = int(raw_loc.replace("FIELD", ""))
-                except:  # noqa: E722
-                    loc_id = -1 # Erreur de lecture
-
-            # Si le tracteur est à l'usine (6), on ne peut pas le prendre
-            if loc_id == 6:
-                 continue
-                
-            dispos.append(t_id)
-        return dispos
-
-    def assigner_taches(self, employees: list, day: int, cash: int, besoins: dict, tracteurs_dispos: list, ids_autorises: list) -> list[str]:
+        # ... (Le reste de la logique ne change pas) ...
+        tractor_is_ready = self.is_tractor_ready(tractor_obj, day)
+        besoin = self.analyser_un_champ(target_field_data, target_field_id, day)
         commandes = []
-        current_cash = cash
-        compteur_eau = 0 
-        ids_traites_ce_tour = set()
-
-        for index_emp, emp in enumerate(employees, start=1):
-            emp_id = int(emp.get("id", index_emp))
-            
-            if emp_id not in ids_autorises: 
-                continue
-            if emp_id in ids_traites_ce_tour: 
-                continue
-            if not self.is_employee_free(emp_id, emp, day): 
+        cout_total = 0 # On initialise le coût
+        
+        for e_id in assigned_workers:
+            emp_data = next((e for e in employees if int(e["id"]) == e_id), None)
+            if emp_data is None: 
                 continue
 
-            # --- 1. STOCKER (PRIORITÉ ABSOLUE) ---
-            if besoins["stock"] and len(tracteurs_dispos) > 0:
-                target_field = besoins["stock"][0] 
-                
-                # === LOGIQUE TRACTEUR ATTITRÉ ===
-                choix_tracteur = None
-                
-                if target_field in tracteurs_dispos:
-                    choix_tracteur = target_field
-                elif len(tracteurs_dispos) > 0:
-                    choix_tracteur = tracteurs_dispos[0]
-                
-                if choix_tracteur is not None:
-                    besoins["stock"].pop(0)
-                    tracteurs_dispos.remove(choix_tracteur) 
+            if not self.is_employee_free(e_id, emp_data, day):
+                continue
+
+            # LOGIQUE ACTIONS...
+            if besoin == "stock" and tractor_is_ready:
+                dist = abs(target_field_id - 6)
+                travel = math.ceil(dist / 3)
+                lock = (travel * 2) + 3 
+                commandes.append(self.creer_commande(e_id, f"STOCKER {target_field_id} {assigned_tractor_id}", day, lock, "🚜 STOCKER", target_field_id, assigned_tractor_id, lock_field=True))
+                tractor_is_ready = False 
+                besoin = None 
+                continue
+
+            if besoin == "water":
+                lock = target_field_id + 3 
+                commandes.append(self.creer_commande(e_id, f"ARROSER {target_field_id}", day, lock, "💧 ARROSE", target_field_id, lock_field=False))
+                continue
+
+            if besoin == "plant":
+                cout_semence = 1000
+                if cash_dispo >= cout_semence:
+                    idx = (target_field_id - 1) % len(self.LEGUMES_CYCLE)
+                    leg = self.LEGUMES_CYCLE[idx]
+                    lock = target_field_id + 4 
+                    commandes.append(self.creer_commande(e_id, f"SEMER {leg} {target_field_id}", day, lock, f"🌱 SEME ({leg})", target_field_id, lock_field=True))
+                    besoin = None
                     
-                    lock_duration = 40 
-                    
-                    commandes.append(self.creer_commande(emp_id, f"STOCKER {target_field} {choix_tracteur}", day, lock_duration, "🚜 STOCKER", target_field, choix_tracteur))
-                    ids_traites_ce_tour.add(emp_id)
-                    continue 
+                    # Mise à jour budget local
+                    cout_total += cout_semence
+                    cash_dispo -= cout_semence
+                    continue
 
-            # --- 2. ARROSER ---
-            if besoins["water"]:
-                target = besoins["water"][compteur_eau % len(besoins["water"])]
-                lock_duration = target + 4 
-                commandes.append(self.creer_commande(emp_id, f"ARROSER {target}", day, lock_duration, "💧 ARROSE", target))
-                ids_traites_ce_tour.add(emp_id)
-                compteur_eau += 1
-                continue
+        # RETURN FINAL
+        return commandes, cout_total
 
-            # --- 3. SEMER ---
-            if besoins["plant"] and current_cash > 2000:
-                target = besoins["plant"].pop(0)
-                index_legume = (target - 1) % len(self.LEGUMES_CYCLE)
-                leg = self.LEGUMES_CYCLE[index_legume]
-                
-                lock_duration = target + 5 
-                commandes.append(self.creer_commande(emp_id, f"SEMER {leg} {target}", day, lock_duration, f"🌱 SEME ({leg})", target))
-                ids_traites_ce_tour.add(emp_id)
-                current_cash -= 1000
-                continue
-                
-        return commandes
+    # ... (Le reste des méthodes copier-coller du fichier précédent)
+    def analyser_un_champ(self, field: dict, field_id: int, day: int) -> Optional[str]:
+        if day <= Cultiver._MEMOIRE_OCCUPATION_CHAMP.get(field_id, -1): 
+            return None
+        content = field["content"]
+        needed = field.get("needed_water", 0)
+        if content != "NONE" and needed == 0: 
+            return "stock"
+        elif needed > 0 and content != "NONE": 
+            return "water"
+        elif content == "NONE":
+            return "plant"
+        return None
 
-    def is_employee_free(self, emp_id: int, emp_data: dict, day: int) -> bool:
-        if day <= Cultiver._MEMOIRE_OCCUPATION_EMP.get(emp_id, -1): 
+    def is_tractor_ready(self, tractor: Optional[Dict[str, Any]], day: int) -> bool:
+        if not tractor:
+            return False 
+        t_id = int(tractor["id"])
+        if day <= Cultiver._MEMOIRE_OCCUPATION_TRACTEUR.get(t_id, -1): 
             return False
-        if emp_data.get("action", "IDLE") != "IDLE":
+        if tractor.get("content", "EMPTY") != "EMPTY":
+            return False
+        if tractor.get("location", "FARM") == "SOUP_FACTORY": 
             return False
         return True
 
-    def creer_commande(self, emp_id, action_str, day, lock_days, log_prefix, field_id, tractor_id=None):
+    def is_employee_free(self, emp_id: int, emp_data: dict, day: int) -> bool:
+        if day <= Cultiver._MEMOIRE_OCCUPATION_EMP.get(emp_id, -1):
+            return False
+        if emp_data.get("action", "IDLE") != "IDLE":
+            Cultiver._MEMOIRE_OCCUPATION_EMP[emp_id] = day + 1
+            return False
+        return True
+
+    def creer_commande(self, emp_id, action_str, day, lock_days, log_prefix, field_id, tractor_id=None, lock_field=True):
         Cultiver._MEMOIRE_OCCUPATION_EMP[emp_id] = day + lock_days
-        Cultiver._MEMOIRE_OCCUPATION_CHAMP[field_id] = day + lock_days
-        
+        if lock_field:
+            Cultiver._MEMOIRE_OCCUPATION_CHAMP[field_id] = day + lock_days
         if tractor_id:
             Cultiver._MEMOIRE_OCCUPATION_TRACTEUR[tractor_id] = day + lock_days
-        
-        print(f"   {log_prefix} Champ {field_id} [Verrou {lock_days}j]")
         return f"{emp_id} {action_str}"
