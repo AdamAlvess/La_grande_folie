@@ -2,9 +2,10 @@ import math
 from typing import Optional, Dict, Any
 
 class Cultiver:
-    _MEMOIRE_OCCUPATION_EMP = {}
-    _MEMOIRE_OCCUPATION_CHAMP = {} 
-    _MEMOIRE_OCCUPATION_TRACTEUR = {}
+    # CORRECTIONS ICI : Ajout des types dict[int, int]
+    _MEMOIRE_OCCUPATION_EMP: dict[int, int] = {}
+    _MEMOIRE_OCCUPATION_CHAMP: dict[int, int] = {} 
+    _MEMOIRE_OCCUPATION_TRACTEUR: dict[int, int] = {}
     _DERNIER_JOUR_VU = -1
 
     def __init__(self):
@@ -33,10 +34,8 @@ class Cultiver:
         tractors = farm.get("tractors", [])
 
         # --- FIX 1 : TRACTEUR MANQUANT ---
-        # On vérifie si le tracteur assigné existe physiquement dans la liste
         tractor_obj = next((t for t in tractors if int(t["id"]) == assigned_tractor_id), None)
         
-        # Si le tracteur n'est pas encore acheté, on ne fait RIEN sur ce champ
         if tractor_obj is None:
             return []
 
@@ -46,7 +45,6 @@ class Cultiver:
         
         for e_id in assigned_workers:
             # --- FIX 2 : EMPLOYE FANTOME ---
-            # On cherche l'employé. S'il n'existe pas encore (pas recruté), on ignore.
             emp_data = next((e for e in employees if int(e["id"]) == e_id), None)
             
             if emp_data is None: 
@@ -125,7 +123,7 @@ class Cultiver:
         if day <= Cultiver._MEMOIRE_OCCUPATION_EMP.get(emp_id, -1):
             return False
             
-        # 2. Vérification Serveur (Si le serveur dit qu'il bosse, on met à jour)
+        # 2. Vérification Serveur
         action = emp_data.get("action", "IDLE")
         if action != "IDLE":
             Cultiver._MEMOIRE_OCCUPATION_EMP[emp_id] = day + 1

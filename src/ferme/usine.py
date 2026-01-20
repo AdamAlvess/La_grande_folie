@@ -1,8 +1,8 @@
+
 class Usine:
-    # On stocke ici jusqu'à quand un ID est occupé
-    _MEMOIRE_OCCUPATION = {} 
-    # On stocke ici si l'ouvrier est DEJA à l'usine (pour ne pas recompter le trajet)
-    _EST_SUR_PLACE = set()
+    _MEMOIRE_OCCUPATION: dict[int, int] = {} 
+    _EST_SUR_PLACE: set[int] = set()
+    
     _DERNIER_JOUR_VU = -1
 
     def __init__(self):
@@ -44,7 +44,6 @@ class Usine:
             
         return True
 
-    # CORRECTION ICI : On retire "-> str" ou on met "-> tuple"
     def _assigner_cuisine(self, emp_id: int, day: int):
         # LOGIQUE DE TRAJET :
         # La ferme est en 0, l'usine en 6. Distance = 6.
