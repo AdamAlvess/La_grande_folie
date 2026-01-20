@@ -19,29 +19,31 @@ class FarmStrategy:
             return []
 
         day = game_data["day"]
-        cash = ma_ferme.get("cash", ma_ferme.get("money", 0))
+        
+        # --- INITIALISATION DU BUDGET GLISSANT ---
+        budget_actuel = ma_ferme.get("cash", ma_ferme.get("money", 0))
+        print(f"💰 [DEBUT TOUR] Cash: {budget_actuel}")
 
-        # 1. FINANCE (On sécurise l'argent d'abord)
-        actions_finance = self.finance.get_manager_action(ma_ferme, day)
+        # 1. FINANCE
+        actions_finance, cout_finance = self.finance.get_manager_action(ma_ferme, day)
         if actions_finance:
             commandes.extend(actions_finance)
-            print(f"💰 [FINANCE] Actions : {actions_finance}")
+            budget_actuel -= cout_finance 
+            print(f"💰 [FINANCE] Dépense : {cout_finance} | Reste : {budget_actuel}")
 
-        # 2. EQUIPE USINE (6 ouvriers fixes)
+        # 2. EQUIPE USINE (Ne coûte rien en cash direct pour l'instant)
         equipe_usine = [1, 2, 3, 4, 5, 6]
         cmd_usine = self.chef_cuisine.execute(ma_ferme, day, ids_autorises=equipe_usine)
         commandes.extend(cmd_usine)
 
-        # 3. EQUIPES AGRICOLES (Par Champ)
+        # 3. EQUIPES AGRICOLES
         fields = ma_ferme.get("fields", [])
-        
         current_worker_id = 7 
         workers_per_field = 3 
 
         for i, field in enumerate(fields):
             field_id = i + 1 
             
-            # Si le champ n'est pas acheté, on saute les ouvriers associés
             if not field["bought"]:
                 current_worker_id += workers_per_field
                 continue
@@ -52,18 +54,19 @@ class FarmStrategy:
                 current_worker_id += 1
 
             tracteur_attitre = field_id 
-
-            # C'est ici que l'ancienne erreur se produisait.
-            # On appelle bien "gerer_un_champ_specifique" maintenant.
-            cmds_champ = self.cultivator.gerer_un_champ_specifique(
-                ma_ferme, day, cash, 
+            cmds_champ, cout_champ = self.cultivator.gerer_un_champ_specifique(
+                ma_ferme, day, budget_actuel, 
                 target_field_id=field_id, 
                 assigned_workers=equipe_champ, 
                 assigned_tractor_id=tracteur_attitre
             )
-            commandes.extend(cmds_champ)
-        
-        # 4. RH (Gestion prudente)
-        commandes.extend(self.drh.gerer_effectifs(ma_ferme))
+            
+            if cmds_champ:
+                commandes.extend(cmds_champ)
+                budget_actuel -= cout_champ
 
+        # 4. RH 
+        commandes.extend(self.drh.gerer_effectifs(ma_ferme, budget_actuel))
+
+        print(f"🛑 [FIN TOUR] Cash estimé restant : {budget_actuel}")
         return commandes
