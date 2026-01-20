@@ -45,10 +45,11 @@ try:
     # mais ici tu utilises 'uv', donc on appelle 'uv' directement.
     
     # Commande 1 : SERVEUR
-    print("🚀 Lancement du SERVEUR...")
-    p_server = subprocess.Popen(["uv", "run", "python", "-m", "chronobio.game.server", "-p", port])
+    print("🚀 Lancement du SERVEUR (Mode Rapide)...")
+    # J'ai ajouté "--fast" à la fin de la liste
+    p_server = subprocess.Popen(["uv", "run", "python", "-m", "chronobio.game.server", "-p", port, "--fast"])
     processes.append(p_server)
-    time.sleep(1) # Pause de sécurité
+    time.sleep(1)
 
     # Commande 2 : VIEWER
     print("📺 Lancement du VIEWER...")

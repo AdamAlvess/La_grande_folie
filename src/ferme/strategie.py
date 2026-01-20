@@ -19,54 +19,142 @@ class FarmStrategy:
             return []
 
         day = game_data["day"]
-        
-        # --- INITIALISATION DU BUDGET GLISSANT ---
-        budget_actuel = ma_ferme.get("cash", ma_ferme.get("money", 0))
-        print(f"💰 [DEBUT TOUR] Cash: {budget_actuel}")
+        budget_actuel = ma_ferme.get("money", 0)
 
         # 1. FINANCE
         actions_finance, cout_finance = self.finance.get_manager_action(ma_ferme, day)
         if actions_finance:
             commandes.extend(actions_finance)
             budget_actuel -= cout_finance 
-            print(f"💰 [FINANCE] Dépense : {cout_finance} | Reste : {budget_actuel}")
 
-        # 2. EQUIPE USINE (Ne coûte rien en cash direct pour l'instant)
-        equipe_usine = [1, 2, 3, 4, 5, 6]
+        # 2. TRI INTELLIGENT DES OUVRIERS (PIÉTONS vs CHAUFFEURS)
+        # C'est ici que la magie opère pour débloquer tes tracteurs.
+        all_employees = ma_ferme.get("employees", [])
+        
+        employes_a_pied = []       # Ouvriers libres sans tracteur
+        employes_motorises = []    # Ouvriers libres DEJA dans un tracteur (Chauffeurs)
+        tracteurs_indisponibles = set() # IDs des tracteurs occupés ou réservés
+
+        for emp in all_employees:
+            eid = int(emp["id"])
+            if eid == 0: continue 
+
+            # Est-il occupé par le serveur ?
+            est_occupe = emp.get("action_to_do") or emp.get("action", "IDLE") != "IDLE"
+            
+            # A-t-il un tracteur sous les fesses ?
+            tid = int(emp["tractor"]["id"]) if emp.get("tractor") else None
+
+            if est_occupe:
+                if tid: tracteurs_indisponibles.add(tid)
+            else:
+                # Il est LIBRE
+                if tid:
+                    # C'est un CHAUFFEUR (il est libre mais assis dans un tracteur)
+                    # On le garde couplé avec son tracteur !
+                    employes_motorises.append((eid, tid))
+                    tracteurs_indisponibles.add(tid)
+                else:
+                    # C'est un PIÉTON
+                    employes_a_pied.append(eid)
+        
+        # On trie pour la stabilité
+        employes_a_pied.sort()
+        employes_motorises.sort() # Trie par ID ouvrier
+
+        # 3. RECENSEMENT DES TRACTEURS VRAIMENT LIBRES (Au parking, vides)
+        tracteurs_libres_parking = []
+        tractors = ma_ferme.get("tractors", [])
+        for t in tractors:
+            tid = int(t["id"])
+            if tid not in tracteurs_indisponibles:
+                tracteurs_libres_parking.append(tid)
+        
+        tracteurs_libres_parking.sort()
+
+        # 4. USINE (On priorise les piétons pour la cuisine, inutile de gâcher un tracteur)
+        equipe_usine = []
+        # On prend d'abord les piétons (ID 1-6 de préférence, ou n'importe qui)
+        pietons_usine = [eid for eid in employes_a_pied if 1 <= eid <= 6]
+        # Si pas assez de piétons "spécialistes", on prend les autres piétons
+        if not pietons_usine:
+             pietons_usine = [eid for eid in employes_a_pied]
+        
+        # On évite d'envoyer les chauffeurs en cuisine (ils doivent conduire !)
+        # Sauf si vraiment personne d'autre
+        
+        # Sélection pour l'usine (on retire de la liste des dispos)
+        for eid in list(pietons_usine):
+             if len(equipe_usine) < 10: # Limite arbitraire pour laisser des gens aux champs
+                 equipe_usine.append(eid)
+                 if eid in employes_a_pied: employes_a_pied.remove(eid)
+
         cmd_usine = self.chef_cuisine.execute(ma_ferme, day, ids_autorises=equipe_usine)
         commandes.extend(cmd_usine)
 
-        # 3. EQUIPES AGRICOLES
+        # 5. CHAMPS (Distribution des tâches avec logique de Chauffeur)
         fields = ma_ferme.get("fields", [])
-        current_worker_id = 7 
-        workers_per_field = 3 
-
-        for i, field in enumerate(fields):
-            field_id = i + 1 
+        champs_achetes = [i for i, f in enumerate(fields) if f["bought"]]
+        
+        if champs_achetes:
+            # On cycle sur les champs
+            idx_cycle = 0
             
-            if not field["bought"]:
-                current_worker_id += workers_per_field
-                continue
+            # TANT QU'IL Y A DU MONDE (A pied ou en tracteur)
+            while employes_motorises or employes_a_pied:
+                field_idx = champs_achetes[idx_cycle]
+                field_id = field_idx + 1
+                field_data = fields[field_idx]
+                
+                # Analyse rapide du besoin pour savoir qui envoyer
+                # (On duplique un peu la logique de cultiver pour le choix tactique)
+                besoin_tracteur = False
+                if field_data["content"] != "NONE" and field_data.get("needed_water", 0) == 0:
+                    besoin_tracteur = True # Récolte = Tracteur OBLIGATOIRE
 
-            equipe_champ = []
-            for _ in range(workers_per_field):
-                equipe_champ.append(current_worker_id)
-                current_worker_id += 1
+                worker_id = None
+                assigned_tractor = -1
 
-            tracteur_attitre = field_id 
-            cmds_champ, cout_champ = self.cultivator.gerer_un_champ_specifique(
-                ma_ferme, day, budget_actuel, 
-                target_field_id=field_id, 
-                assigned_workers=equipe_champ, 
-                assigned_tractor_id=tracteur_attitre
-            )
-            
-            if cmds_champ:
-                commandes.extend(cmds_champ)
-                budget_actuel -= cout_champ
+                if besoin_tracteur:
+                    # PRIORITÉ 1 : Un Chauffeur déjà prêt (C'est ça qui débloque ton usine !)
+                    if employes_motorises:
+                        worker_id, assigned_tractor = employes_motorises.pop(0)
+                    # PRIORITÉ 2 : Un Piéton + Un Tracteur du parking
+                    elif employes_a_pied and tracteurs_libres_parking:
+                        worker_id = employes_a_pied.pop(0)
+                        assigned_tractor = tracteurs_libres_parking.pop(0)
+                    else:
+                        # Pas de ressources pour récolter ce champ, on passe au suivant
+                        pass 
+                else:
+                    # Pas besoin de tracteur (Arrosage / Semis)
+                    # PRIORITÉ 1 : Un Piéton (moins cher en essence/logique)
+                    if employes_a_pied:
+                        worker_id = employes_a_pied.pop(0)
+                        assigned_tractor = -1 
+                    # PRIORITÉ 2 : Un Chauffeur (il ira avec son tracteur, tant pis)
+                    elif employes_motorises:
+                        worker_id, assigned_tractor = employes_motorises.pop(0)
+                
+                # Si on a trouvé quelqu'un, on lance la commande
+                if worker_id:
+                    cmds_champ, cout_champ = self.cultivator.gerer_un_champ_specifique(
+                        ma_ferme, day, budget_actuel, 
+                        target_field_id=field_id, 
+                        assigned_workers=[worker_id], 
+                        assigned_tractor_id=assigned_tractor
+                    )
+                    if cmds_champ:
+                        commandes.extend(cmds_champ)
+                        budget_actuel -= cout_champ
+                
+                # On arrête si tout le monde est occupé
+                if not employes_motorises and not employes_a_pied:
+                    break
+                    
+                idx_cycle = (idx_cycle + 1) % len(champs_achetes)
 
-        # 4. RH 
+        # 6. RH 
         commandes.extend(self.drh.gerer_effectifs(ma_ferme, budget_actuel))
 
-        print(f"🛑 [FIN TOUR] Cash estimé restant : {budget_actuel}")
         return commandes
