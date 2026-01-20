@@ -11,56 +11,43 @@ class GestionnairePersonnel:
         return salaire_prochain_mois
 
     def gerer_effectifs(self, ma_ferme: dict) -> list[str]:
-        
         if ma_ferme.get("blocked", False):
-            # On ne fait rien si la ferme est bloquée, sinon on spamme le serveur pour rien
             return []
+            
         commandes = []
         employes = ma_ferme["employees"]
         champs = ma_ferme["fields"]
         cash = ma_ferme.get("cash", ma_ferme.get("money", 0))
         nb_employes = len(employes)
-        nb_champs = len(champs)
-        # 1 ouvrier par champ + 2 à l'usine (si on a des champs)
-        if nb_champs > 0:
-            cible = nb_champs + 2
+        nb_champs_actifs = sum(1 for f in champs if f["bought"])
+
+        # --- NOUVELLE STRATÉGIE RH : L'ARMÉE ---
+        if nb_champs_actifs > 0:
+            cible = (nb_champs_actifs * 3) + 6
         else:
-            cible = 0
+            cible = 2
+
         cible = min(cible, self.MAX_EMPLOYES)
-
-        # On somme les salaires actuels pour voir si on survit au prochain paiement
         masse_salariale_totale = sum(e.get("salary", self.SALAIRE_BASE) for e in employes)
-
 
         # EMBAUCHE
         if nb_employes < cible:
-            if nb_employes >= self.MAX_EMPLOYES:
-                print("🛑 RH: Limite de 300 employés atteinte.")
-                return []
+            cout_premier_mois = self.SALAIRE_BASE
 
-            # Coût du nouvel employé le premier mois
-            cout_nouvel_employe = self.SALAIRE_BASE
-            if cash > (masse_salariale_totale + cout_nouvel_employe + 2000): # +2000€ de marge de sécurité
+            if cash > (masse_salariale_totale + cout_premier_mois + 10_000): 
                 commandes.append("0 EMPLOYER")
-                print(f"🤝 RH: Embauche lancée (Effectif: {nb_employes} -> {nb_employes+1})")
-            else:
-                print(f"💸 RH: Pas assez de cash pour embaucher ({cash}€ dispo)")
+                print(f"🤝 RH: Recrutement (Effectif: {nb_employes} / Cible: {cible})")
+            else:   
+                print(f"💸 RH: Cash insuffisant pour recruter ({cash}€)")
 
-        # LICENCIE 
-        elif nb_employes > cible:
-            #Virer celui qui a le plus gros salaire pour alléger la masse salariale
-            # On trie les employés
+        # LICENCIEMENT
+        elif nb_employes >= cible:
             employes_tries = sorted(employes, key=lambda x: x.get("salary", 0), reverse=True)
-            
-            candidat_depart = employes_tries[0] # Le plus cher
-            id_ouvrier = candidat_depart["id"] 
-            salaire_actuel = candidat_depart.get("salary", self.SALAIRE_BASE)
-            cout_indemnite = self.estimer_cout_licenciement(salaire_actuel)
+            candidat = employes_tries[0]
+            cout_indemnite = self.estimer_cout_licenciement(candidat.get("salary", self.SALAIRE_BASE))
 
-            # On vérifie si on a le cash pour payer l'indemnité 
             if cash > cout_indemnite:
-                commandes.append(f"0 LICENCIER {id_ouvrier}")
-                print(f"Licenciement de l'ouvrier {id_ouvrier} (Coût: {cout_indemnite}€)")
-            else:
-                print("On veut licencier mais on ne peut pas payer l'indemnité !")
+                commandes.append(f"0 LICENCIER {candidat['id']}")
+                print(f"👋 RH: Licenciement économique de {candidat['id']}")
+
         return commandes
