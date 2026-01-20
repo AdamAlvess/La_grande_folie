@@ -71,30 +71,19 @@ class Cultiver:
         target_field_data = fields[target_field_id - 1] 
         employees = farm.get("employees", [])
         tractors = farm.get("tractors", [])
-
-        # --- CORRECTION MAJEURE ICI ---
-        # On cherche le tracteur, mais s'il n'est pas là (None), CE N'EST PAS GRAVE !
-        # On continue pour voir si on peut arroser ou planter.
         tractor_obj = next((t for t in tractors if int(t["id"]) == assigned_tractor_id), None)
-        
-        # On vérifie si le tracteur est prêt (False si tractor_obj est None)
         tractor_is_ready = self.is_tractor_ready(tractor_obj, day)
-
         besoin = self.analyser_un_champ(target_field_data, target_field_id, day)
         commandes = []
         cout_total = 0 
-        
+    
         for e_id in assigned_workers:
             emp_data = next((e for e in employees if int(e["id"]) == e_id), None)
             if emp_data is None: 
                 continue
-
             if not self.is_employee_free(e_id, emp_data, day):
                 continue
-
-            # LOGIQUE ACTIONS...
             if besoin == "stock":
-                # Pour stocker, il faut IMPÉRATIVEMENT un tracteur prêt
                 if tractor_is_ready:
                     dist = abs(target_field_id - 6)
                     travel = math.ceil(dist / 3)
@@ -104,15 +93,11 @@ class Cultiver:
                     besoin = None 
                     continue
                 else:
-                    # Pas de tracteur dispo ? On ne fait rien pour le stock, mais on ne quitte pas !
-                    # On laisse la boucle continuer au cas où (mais ici besoin restera "stock" donc on ne fera rien d'autre)
                     pass
-
             if besoin == "water":
                 lock = target_field_id + 3 
                 commandes.append(self.creer_commande(e_id, f"ARROSER {target_field_id}", day, lock, "💧 ARROSE", target_field_id, lock_field=False))
                 continue
-
             if besoin == "plant":
                 cout_semence = 1000
                 if cash_dispo >= cout_semence:
@@ -121,9 +106,7 @@ class Cultiver:
                     lock = target_field_id + 4 
                     commandes.append(self.creer_commande(e_id, f"SEMER {leg} {target_field_id}", day, lock, f"🌱 SEME ({leg})", target_field_id, lock_field=True))
                     besoin = None
-                    
                     cout_total += cout_semence
                     cash_dispo -= cout_semence
                     continue
-
         return commandes, cout_total

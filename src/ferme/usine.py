@@ -53,7 +53,6 @@ class Usine:
         stock_restant = self._calculer_stock_total(farm)
         if stock_restant <= 0: 
             return []
-
         commandes = []
         employees = farm.get("employees", [])
         for emp in employees:

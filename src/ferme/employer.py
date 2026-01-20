@@ -13,31 +13,20 @@ class GestionnairePersonnel:
     def gerer_effectifs(self, ma_ferme: dict, cash_disponible: int) -> list[str]:
         if ma_ferme.get("blocked", False):
             return []
-            
         commandes = []
         employes = ma_ferme["employees"]
         champs = ma_ferme["fields"]
-        
-        # On n'utilise PLUS le cash du json, mais celui passé en paramètre
-        # cash = ma_ferme.get("cash", ma_ferme.get("money", 0)) 
-        
         nb_employes = len(employes)
         nb_champs_actifs = sum(1 for f in champs if f["bought"])
-
-        # --- NOUVELLE STRATÉGIE RH : L'ARMÉE ---
         if nb_champs_actifs > 0:
             cible = (nb_champs_actifs * 3) + 6
         else:
             cible = 2
-
         cible = min(cible, self.MAX_EMPLOYES)
         masse_salariale_totale = sum(e.get("salary", self.SALAIRE_BASE) for e in employes)
-
         # EMBAUCHE
         if nb_employes < cible:
             cout_premier_mois = self.SALAIRE_BASE
-
-            # On vérifie par rapport au CASH DISPONIBLE
             if cash_disponible > (masse_salariale_totale + cout_premier_mois + 10_000): 
                 commandes.append("0 EMPLOYER")
                 print(f"🤝 RH: Recrutement (Effectif: {nb_employes} / Cible: {cible})")
@@ -49,9 +38,7 @@ class GestionnairePersonnel:
             employes_tries = sorted(employes, key=lambda x: x.get("salary", 0), reverse=True)
             candidat = employes_tries[0]
             cout_indemnite = self.estimer_cout_licenciement(candidat.get("salary", self.SALAIRE_BASE))
-
             if cash_disponible > cout_indemnite:
                 commandes.append(f"0 LICENCIER {candidat['id']}")
                 print(f"👋 RH: Licenciement économique de {candidat['id']}")
-
         return commandes
