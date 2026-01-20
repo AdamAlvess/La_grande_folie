@@ -12,7 +12,7 @@ class FinanceManager:
         self.LOAN_AMOUNT = 100_000
 
         # Buffer de sécurité pour éviter le Game Over (farm.py ligne 102)
-        self.SECURITY_BUFFER__S_T_O_P = 15_000 
+        self.SECURITY_BUFFER__S_T_O_P = 15_000
         
 
     def get_manager_action(self, farm_data: Dict[str, Any], day: int) -> List[str]:
