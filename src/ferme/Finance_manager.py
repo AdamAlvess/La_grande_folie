@@ -21,39 +21,39 @@ class FinanceManager:
         loans = farm_data.get("loans", [])
         employees = farm_data.get("employees", [])
         
-        nb_fields_bought = sum(1 for f in fields if f["bought"])
+        # Utilisation de f["bought"]
+        nb_fields_bought = sum(1 for f in fields if f.get("bought", False))
         nb_tractors = len(tractors)
         nb_loans = len(loans)
         
-        # --- 2. GESTION DES EMPRUNTS (Urgence Uniquement) ---
+        # --- 2. GESTION DES EMPRUNTS ---
         if cash < 2000 and nb_loans < self.MAX_LOANS:
              commandes.append(f"0 EMPRUNTER {self.LOAN_AMOUNT}")
-             print(f"💸 [FINANCE] Compte à sec ({cash}€). Emprunt demandé. On attend l'argent.")
-             return commandes # <--- ON STOPPE TOUT ICI
+             print(f"💸 [FINANCE] Compte à sec ({cash}€). Emprunt demandé.")
+             return commandes 
 
-        # --- 3. CALCUL DU BUDGET RÉEL ---
+        # --- 3. INVESTISSEMENT ---
         masse_salariale = len(employees) * 1200 
         cash_investissable = cash - self.SECURITY_BUFFER - masse_salariale
+
         if cash_investissable <= 0:
             return []
 
-        # --- 4. INVESTISSEMENT (Uniquement si on a le cash en main) ---
         while True:
             action_faite = False
+            # Priorité Tracteur
             if nb_tractors < nb_fields_bought and nb_tractors < self.MAX_TRACTORS_GLOBAL:
                 if cash_investissable >= self.PRICE_TRACTOR:
                     commandes.append("0 ACHETER_TRACTEUR")
-                    print(f"🚜 [FINANCE] Achat Tracteur cash (Reste: {cash_investissable - self.PRICE_TRACTOR})")
                     cash_investissable -= self.PRICE_TRACTOR
                     nb_tractors += 1
                     action_faite = True
                 else:
                     break 
-
+            # Priorité Champ
             elif nb_fields_bought < self.MAX_FIELDS:
                 if cash_investissable >= self.PRICE_FIELD:
                     commandes.append("0 ACHETER_CHAMP")
-                    print(f"⛳ [FINANCE] Achat Champ cash (Reste: {cash_investissable - self.PRICE_FIELD})")
                     cash_investissable -= self.PRICE_FIELD
                     nb_fields_bought += 1
                     action_faite = True
