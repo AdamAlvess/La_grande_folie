@@ -52,7 +52,7 @@ try:
 
     # Commande 2 : VIEWER
     print("📺 Lancement du VIEWER...")
-    p_viewer = subprocess.Popen(["uv", "run", "python", "-m", "chronobio.viewer", "-p", port, "--width", "1100", "--height", "700"])
+    p_viewer = subprocess.Popen(["uv", "run", "python", "-m", "chronobio.viewer", "-p", port, "--width", "1500", "--height", "800"])
     processes.append(p_viewer)
 
     # Commande 3 : FERME
